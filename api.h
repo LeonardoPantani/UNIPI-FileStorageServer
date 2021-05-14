@@ -1,5 +1,11 @@
+/**
+ * @file    api.h
+ * @brief   Contiene l'header dei metodi utilizzati dal client per comunicare col server.
+**/
 #include <stdio.h>
 #include <time.h>
+
+#include "api.h"
 
 /**
  * @brief Apre connessione AF_UNIX e ripete più volte la richiesta fino ad un certo tempo.

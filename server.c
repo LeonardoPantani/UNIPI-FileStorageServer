@@ -12,6 +12,7 @@
 #include "utils/includes/macro.h"
 #include "utils/includes/utils.h"
 #include "utils/includes/config.h"
+#include "utils/includes/actions.h"
 
 pthread_mutex_t mutexChiusura = PTHREAD_MUTEX_INITIALIZER;
 
@@ -27,11 +28,18 @@ void* gestoreConnessione(void* unused) {
     return (void*) NULL; // non proprio necessario
 }
 
-void *gestorePool(void* socket_fd) {
+void *gestorePool(void* socket) {
+    int socket_fd = *((int*)socket);
+
     while(TRUE) {
         if(chiusuraForte || chiusuraDebole) {
             break;
         }
+
+        stampaDebug("GP> Attesa alla accept...");
+        int socketConnection = accept(socket_fd, NULL, NULL);
+        checkStop(socketConnection == -1, "accept nuova connessione da client");
+        stampaDebug("GP> Connessione accettata a un client.");  
     }
     return (void*) NULL; // non proprio necessario
 }

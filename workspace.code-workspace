@@ -10,7 +10,9 @@
 			"stdio.h": "c",
 			"config.h": "c",
 			"utils.h": "c",
-			"macro.h": "c"
+			"macro.h": "c",
+			"actions.h": "c",
+			"stdlib.h": "c"
 		}
 	}
 }
