@@ -1,15 +1,16 @@
 #define CONFIG_PATH "./config.txt"
 #define KEY "efhiauefrwhwafghaw2131guys"
 
-#define VARIABILI_PREVISTE 4
+#define VARIABILI_PREVISTE 5 // va considerata anche la chiave del serverl, quindi è +1
 
 typedef struct configurazione {
     int max_workers;
     int max_memory_size;
+    int max_files;
     char socket_file_name[MAX_LINE_SIZE];
 } Config;
 
-int configLoader(Config conf) {
+int loadConfig(Config* conf) {
     int v = 0, temp;
 
 	FILE *fp = fopen(CONFIG_PATH, "r");
@@ -45,17 +46,24 @@ int configLoader(Config conf) {
                             if(temp <= 0) {
                                 return ERR_NEGVALUE;
                             }
-                            conf.max_workers = atoi(valore);
+                            (*conf).max_workers = atoi(valore);
                             v++;
                         } else if(strcmp(variabile, "MAX_MEMORY_SIZE") == 0) {
                             temp = atoi(valore);
                             if(temp <= 0) {
                                 return ERR_NEGVALUE;
                             }
-                            conf.max_memory_size = atoi(valore);
+                            (*conf).max_memory_size = atoi(valore);
+                            v++;
+                        } else if(strcmp(variabile, "MAX_FILES") == 0) {
+                            temp = atoi(valore);
+                            if(temp <= 0) {
+                                return ERR_NEGVALUE;
+                            }
+                            (*conf).max_files = atoi(valore);
                             v++;
                         } else if(strcmp(variabile, "SOCKET_FILE_NAME") == 0) {
-                            strcpy(conf.socket_file_name, valore);
+                            strcpy((*conf).socket_file_name, valore);
                             v++;
                         } else {
                             // TODO
@@ -76,4 +84,40 @@ int configLoader(Config conf) {
     } else {
         return ERR_UNSETVALUES; // if the number of variables is less than expected then return error
     }
+}
+
+void configLoader(Config* conf) {
+    pp("> Caricamento file di config", CLR_INFO);
+    switch(loadConfig(conf)) {
+        case ERR_FILEOPENING:
+            pp("Errore durante l'apertura del file di config.", CLR_ERROR);
+            exit(EXIT_FAILURE);
+        break;
+
+        case ERR_INVALIDKEY:
+            pp("Chiave del server non valida.", CLR_ERROR);
+            exit(EXIT_FAILURE);
+        break;
+
+        case ERR_NEGVALUE:
+            pp("Una o più variabili hanno un valore negativo.", CLR_ERROR);
+            exit(EXIT_FAILURE);
+        break;
+
+        case ERR_EMPTYVALUE:
+            pp("Una o più variabili hanno un valore vuoto.", CLR_ERROR);
+            exit(EXIT_FAILURE);
+        break;
+
+        case ERR_UNSETVALUES:
+            pp("Una o più variabili non sono presenti nel file di config.", CLR_ERROR);
+            exit(EXIT_FAILURE);
+        break;
+
+        case ERR_ILLEGAL:
+            pp("Testo illegale nel file di config.", CLR_ERROR);
+            exit(EXIT_FAILURE);
+        break;
+    }
+    pp("> Caricamento config completato.", CLR_INFO);
 }

@@ -1,6 +1,7 @@
-#define CLR_INFO 90
 #define CLR_WARNING 93
+#define CLR_SUCCESS 92
 #define CLR_ERROR 91
+#define CLR_INFO 90
 #define CLR_DEFAULT 0
 
 #define MAX_LINE_SIZE 1000
