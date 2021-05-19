@@ -9,21 +9,152 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 
-#include "utils/includes/macro.h"
-#include "utils/includes/utils.h"
-#include "utils/includes/config.h"
-#include "utils/includes/actions.h"
+#include "utils/includes/config.c"
+#include "utils/includes/message.c"
+#include "communication.c"
+#include "utils/includes/client_queue.c"
 
 pthread_mutex_t mutexChiusura = PTHREAD_MUTEX_INITIALIZER;
+
+ClientQueue *coda_client = NULL;
+
+pthread_mutex_t mutexCodaClient = PTHREAD_MUTEX_INITIALIZER;
+
+pthread_cond_t clientInAttesa = PTHREAD_COND_INITIALIZER;
 
 int chiusuraForte  = FALSE;
 int chiusuraDebole = FALSE;
 
-void* gestoreConnessione(void* unused) {
-    while(TRUE) {
-        if(chiusuraForte || chiusuraDebole) {
+static Message* elaboraAzione(int socketConnection, MessageHeader* msg_hdr, MessageBody* msg_bdy) {
+    Message* risposta = malloc(sizeof(Message));
+    checkStop(risposta == NULL, "malloc risposta elaboraAzione");
+
+    setMessageHeader(risposta, AC_UNKNOWN, msg_hdr->abs_path);
+    setMessageBody(risposta, 0, NULL);
+
+    switch(msg_hdr->action) {
+        case AC_HELLO: {
+            checkStop(readMessageBody(socketConnection, &(risposta->bdy)) == 0, "errore lettura body hello");
             break;
         }
+
+        case AC_STOPPING: {
+
+            break;
+        }
+
+        case AC_UNKNOWN: {
+            break;
+        }
+    }
+
+    return risposta;
+}
+
+void* gestoreConnessione(void* unused) {
+    while(TRUE) {
+        locka(mutexCodaClient);
+        locka(mutexChiusura);
+        while(coda_client->numClients == 0 || chiusuraDebole || chiusuraForte) {
+            if(chiusuraDebole || chiusuraForte) {
+                unlocka(mutexChiusura);
+                unlocka(mutexCodaClient);
+                return (void*)NULL;
+            } else {
+                unlocka(mutexChiusura);
+            }
+            
+            stampaDebug("GC> Aspetto una connessione da gestire...");
+            checkStop(pthread_cond_wait(&clientInAttesa, &mutexCodaClient) != 0, "attesa di un client nella cond");
+        
+            locka(mutexChiusura);
+        }
+        // da qui in poi ho trovato un client da servire, ne ottengo il socket dalla coda
+        unlocka(mutexChiusura);
+
+        int socketConnection = removeFromQueue(coda_client);
+        unlocka(mutexCodaClient);
+        checkStop(socketConnection == -1, "rimozione primo elemento dalla coda in attesa fallita");
+        stampaDebug("GC> Connessione ottenuta dalla coda.");
+
+        // === INIZIO A SERVIRE IL CLIENT ===
+        // creo variabili per contenere risposte
+        MessageHeader* header = malloc(sizeof(MessageHeader));
+        checkStop(header == NULL, "malloc header");
+
+        MessageBody* body = malloc(sizeof(MessageBody));
+        checkStop(body == NULL, "malloc body");
+
+        Message* risposta = malloc(sizeof(Message));
+        checkStop(risposta == NULL, "malloc risposta");
+        setMessageHeader(risposta, AC_UNKNOWN, NULL);
+        setMessageBody(risposta, 0, NULL);
+
+        // INVIO MESSAGGIO DI BENVENUTO
+        Message* benvenuto = malloc(sizeof(Message));
+        checkStop(benvenuto == NULL, "malloc benvenuto");
+
+        char* testo_risposta = "Benvenuto, sono in attesa di tue richieste";
+
+        setMessageHeader(benvenuto, AC_WELCOME, "*unused*");
+        setMessageBody(benvenuto, strlen(testo_risposta), testo_risposta);
+
+        checkStop(sendMessage(socketConnection, benvenuto) != 0, "errore messaggio iniziale fallito");
+        pp("GC> Benvenuto inviato al client, attendo una risposta...", CLR_INFO);
+
+        int esito = readMessageHeader(socketConnection, header);
+
+        if(esito == 0) {
+            if(header->action == AC_HELLO) {
+                if(readMessageBody(socketConnection, body) != 0) {
+                    pp("GC> Il client ha mandato un AC_HELLO senza body non valido!", CLR_ERROR);
+                    break;
+                }
+                ppf(CLR_SUCCESS); fprintf(stdout, "GC> Il client ha risposto al WELCOME: %s. Inizio comunicazione.\n", body->buffer); ppff();
+            }
+        }
+
+        stampaDebug("Ehi");
+
+        // ############# PROVA
+        while(TRUE) {
+            // controllo se c'è un segnale di terminazione
+            locka(mutexChiusura);
+            if(chiusuraForte) {
+                unlocka(mutexChiusura);
+                setMessageHeader(risposta, AC_STOPPING, "*unused*");
+                checkStop(sendMessage(socketConnection, risposta) != 0, "errore messaggio iniziale fallito");
+                checkStop(close(socketConnection) == -1, "chiusura connessione dopo segnale");
+
+                free(header);
+                free(body);
+                return (void*)NULL;
+            }
+            unlocka(mutexChiusura);
+        }
+        // ############# PROVA
+
+        // comunicazione iniziata!
+        esito = readMessageHeader(socketConnection, header);
+        while(esito == 0) {
+            stampaDebug("Oi");
+            // controllo se c'è un segnale di terminazione
+            locka(mutexChiusura);
+            if(chiusuraForte) {
+                unlocka(mutexChiusura);
+                setMessageHeader(risposta, AC_STOPPING, "*unused*");
+                checkStop(sendMessage(socketConnection, risposta) != 0, "errore messaggio iniziale fallito");
+                checkStop(close(socketConnection) == -1, "chiusura connessione dopo segnale");
+
+                free(header);
+                free(body);
+                return (void*)NULL;
+            }
+            unlocka(mutexChiusura);
+
+            // richiesta dopo
+            esito = readMessageHeader(socketConnection, header);
+        }  
     }
     return (void*) NULL; // non proprio necessario
 }
@@ -32,14 +163,25 @@ void *gestorePool(void* socket) {
     int socket_fd = *((int*)socket);
 
     while(TRUE) {
-        if(chiusuraForte || chiusuraDebole) {
+        locka(mutexChiusura);
+        if(chiusuraDebole || chiusuraForte) {
+            unlocka(mutexChiusura);
             break;
+        } else {
+            unlocka(mutexChiusura);
         }
 
-        stampaDebug("GP> Attesa alla accept...");
+        stampaDebug("GP> In attesa di una connessione...");
         int socketConnection = accept(socket_fd, NULL, NULL);
         checkStop(socketConnection == -1, "accept nuova connessione da client");
-        stampaDebug("GP> Connessione accettata a un client.");  
+        stampaDebug("GP> Connessione accettata a un client.");
+
+        locka(mutexCodaClient);
+        checkStop(addToQueue(coda_client, socketConnection) == -1, "impossibile aggiungere alla coda dei client in attesa");
+        unlocka(mutexCodaClient);
+        stampaDebug("GP> Connessione del client messa in coda!");
+    
+        checkStop(pthread_cond_signal(&clientInAttesa) != 0, "segnale arrivatoClient");
     }
     return (void*) NULL; // non proprio necessario
 }
@@ -54,7 +196,7 @@ void *attesaSegnali(void* statFile) {
     checkStop(sigaddset(&insieme, SIGQUIT) == -1, "settaggio a 1 della flag per SIGQUIT");
 
     while(TRUE) {
-        stampaDebug("GS> In attesa...");
+        stampaDebug("GS> In attesa di un segnale...");
         checkStop(sigwait(&insieme, &segnale) != 0, "in attesa di un segnale gestito");
 
         if(segnale == SIGINT || segnale == SIGQUIT) {
@@ -63,14 +205,16 @@ void *attesaSegnali(void* statFile) {
             locka(mutexChiusura);
             chiusuraForte = TRUE;
             unlocka(mutexChiusura);
+            checkNull(pthread_cond_broadcast(&clientInAttesa) != 0, "signal clientInAttesa")
             break;
         }
 
-        if(segnale == SIGTERM) {
+        if(segnale == SIGHUP) {
             stampaDebug("GS> Segnale TERMINAZIONE LENTA ricevuto.");
             locka(mutexChiusura);
             chiusuraDebole = TRUE;
             unlocka(mutexChiusura);
+            checkNull(pthread_cond_broadcast(&clientInAttesa) != 0, "signal clientInAttesa")
             break;
         }
     }
@@ -92,7 +236,7 @@ int main(int argc, char* argv[]) {
     // tolgo la maschera inserita all'inizio, la lascio solo per i segnali da gestire con thread
     checkStop(sigemptyset(&insieme) == -1, "settaggio a 0 di tutte le flag di insieme");
     checkStop(sigaddset(&insieme, SIGINT) == -1, "settaggio a 1 della flag per SIGINT");
-    checkStop(sigaddset(&insieme, SIGTERM) == -1, "settaggio a 1 della flag per SIGTERM");
+    checkStop(sigaddset(&insieme, SIGHUP) == -1, "settaggio a 1 della flag per SIGTERM");
     checkStop(sigaddset(&insieme, SIGQUIT) == -1, "settaggio a 1 della flag per SIGQUIT");
     // TODO
     checkStop(pthread_sigmask(SIG_SETMASK, &insieme, NULL) != 0, "rimozione mascheramento iniziale dei segnali ignorati o gestiti in modo custom");
@@ -103,7 +247,11 @@ int main(int argc, char* argv[]) {
     pp("---- INIZIO SERVER ----", CLR_INFO);
     configLoader(&config);
 
+    // crea coda connessione
+    checkStop((coda_client = createQueue(config.max_connections)) == NULL, "creazione coda connessioni");
+
     /*========= CONNESSIONE =========*/
+    unlink(config.socket_file_name); // FIXME da rimuovere quando sta roba sarà più stabile
     // 1. SOCKET
     int socket_fd = socket(AF_UNIX, SOCK_STREAM, 0);
     checkStop(socket_fd == -1, "creazione socket iniziale");
@@ -164,7 +312,9 @@ int main(int argc, char* argv[]) {
     stampaDebug("> Thread gestore connessioni terminato.");
 
     checkStop(unlink(config.socket_file_name) == -1, "eliminazione file socket");
-    
+    deleteQueue(coda_client);
+
+
     pp("---- FINE SERVER ----", CLR_INFO);
 
     return 0;

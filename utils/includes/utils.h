@@ -1,3 +1,10 @@
+/**
+ * @file utils.h
+ * @brief Contiene funzioni di utilità, comprese stampe colorate, debug eccetera.
+**/
+#ifndef UTILS_H_
+#define UTILS_H_
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -11,15 +18,6 @@
 #define CLR_DEFAULT     0
 
 #define MAX_LINE_SIZE 1000
-
-enum ErroriConfig {
-    ERR_FILEOPENING = -1,
-    ERR_INVALIDKEY  = -2,
-    ERR_NEGVALUE    = -3,
-    ERR_EMPTYVALUE  = -4,
-    ERR_UNSETVALUES = -5,
-    ERR_ILLEGAL     = -6,
-};
 
 /**
  * @brief Dà un valore in base a se il carattere specificato è nella stringa o no.
@@ -45,6 +43,7 @@ int containsCharacter(char ago, char* pagliaio) {
 **/
 void ppf(int num) { // stampa inizio colore
     printf("\033[%dm", num);
+    fflush(stdout);
 }
 
 
@@ -53,6 +52,7 @@ void ppf(int num) { // stampa inizio colore
 **/
 void ppff() { // stampa fine colore
     printf("\033[0m");
+    fflush(stdout);
 }
 
 
@@ -64,6 +64,7 @@ void ppff() { // stampa fine colore
 **/
 void pp(char* string, int num) {
     printf("\033[%dm%s\033[0m\n", num, string);
+    fflush(stdout);
 }
 
 
@@ -74,6 +75,7 @@ void pp(char* string, int num) {
 **/
 void pe(char* string) {
     printf("\033[91m%s: %s (codice %d)\033[0m\n", string, strerror(errno), errno);
+    fflush(stdout);
 }
 
 
@@ -102,3 +104,5 @@ int timespecDiff(struct timespec tempoInizio, struct timespec tempoFine, struct 
         return 0;
     }
 }
+
+#endif /* UTILS_H */

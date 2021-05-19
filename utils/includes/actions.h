@@ -8,9 +8,16 @@ typedef enum {
      * SERVER
     **/
    AC_WELCOME = 0,
+   AC_CLOSING = 1,
 
     /**
      * CLIENT
     **/
-   AC_HELLO   = 0,
-} action_t;
+   AC_HELLO   = 2,
+   AC_STOPPING = 3,
+
+   /**
+    * Altro
+    **/
+   AC_UNKNOWN = 4,
+} ActionType;

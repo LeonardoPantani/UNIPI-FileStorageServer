@@ -3,15 +3,14 @@
  * @brief   Contiene l'implementazione delle funzioni dell'api
  *          che permette al client di collegarsi al server.
 **/
-#include <stdio.h>
 #include <string.h>
-#include <time.h>
 #include <errno.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 
-#include "utils/includes/utils.h"
 #include "utils/includes/macro.h"
+#include "utils/includes/utils.h"
+#include "api.h"
 
 int openConnection(const char* sockname, int msec, const struct timespec abstime) {
     // creazione socket

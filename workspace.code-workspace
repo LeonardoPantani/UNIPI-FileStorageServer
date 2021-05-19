@@ -12,7 +12,10 @@
 			"utils.h": "c",
 			"macro.h": "c",
 			"actions.h": "c",
-			"stdlib.h": "c"
+			"stdlib.h": "c",
+			"un.h": "c",
+			"client_queue.h": "c",
+			"communication.h": "c"
 		}
 	}
 }
