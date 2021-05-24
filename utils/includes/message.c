@@ -5,9 +5,10 @@
 
 #include "message.h"
 
-static void setMessageHeader(Message* msg, ActionType ac, char* path) {
+static void setMessageHeader(Message* msg, ActionType ac, char* path, int flags) {
     msg->hdr.action   = ac;
     msg->hdr.abs_path = path;
+    msg->hdr.flags    = flags;
 }
 
 static void setMessageBody(Message* msg, int bdy_length, char* buffer) {

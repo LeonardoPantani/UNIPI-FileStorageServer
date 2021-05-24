@@ -3,6 +3,9 @@
  * @brief   Contiene l'header dei metodi utilizzati per la coda di client.
 **/
 
+#ifndef CLIENT_QUEUE_H_
+#define CLIENT_QUEUE_H_
+
 typedef struct {
     int first;
     int last;
@@ -45,3 +48,5 @@ int addToQueue(ClientQueue *coda, int elemento);
  * @returns 1 in caso di successo, 0 in caso di fallimento
 **/
 int removeFromQueue(ClientQueue *coda);
+
+#endif /* CLIENT_QUEUE_H_ */

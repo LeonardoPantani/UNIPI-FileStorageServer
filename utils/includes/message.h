@@ -11,6 +11,7 @@
 typedef struct {
     ActionType  action;
     char*       abs_path;
+    int         flags;
 } MessageHeader;
 
 
@@ -32,8 +33,9 @@ typedef struct {
  * @param msg   Il messaggio di cui settare l'header
  * @param ac    Il tipo di azione riferita a quel messaggio
  * @param path  Percorso che identifica un file univocamente
+ * @param flags Flags impostate da determinati messaggi
 **/
-static void setMessageHeader(Message* msg, ActionType ac, char* path);
+static void setMessageHeader(Message* msg, ActionType ac, char* path, int flags);
 
 
 /**

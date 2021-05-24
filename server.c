@@ -11,13 +11,17 @@
 
 #include "utils/includes/config.c"
 #include "utils/includes/message.c"
+#include "utils/includes/hash_table.c"
 #include "communication.c"
 #include "utils/includes/client_queue.c"
+
+hashtable_t *ht = NULL;
+int lockHT = -1;
+pthread_mutex_t mutexHT = PTHREAD_MUTEX_INITIALIZER;
 
 pthread_mutex_t mutexChiusura = PTHREAD_MUTEX_INITIALIZER;
 
 ClientQueue *coda_client = NULL;
-
 pthread_mutex_t mutexCodaClient = PTHREAD_MUTEX_INITIALIZER;
 
 pthread_cond_t clientInAttesa = PTHREAD_COND_INITIALIZER;
@@ -29,22 +33,42 @@ static Message* elaboraAzione(int socketConnection, MessageHeader* msg_hdr, Mess
     Message* risposta = malloc(sizeof(Message));
     checkStop(risposta == NULL, "malloc risposta elaboraAzione");
 
-    setMessageHeader(risposta, AC_UNKNOWN, msg_hdr->abs_path);
+    setMessageHeader(risposta, AC_UNKNOWN, msg_hdr->abs_path, 0);
     setMessageBody(risposta, 0, NULL);
 
+    ppf(CLR_INFO); printf("GC|EA> Arrivata richiesta di tipo: %d!\n", msg_hdr->action); ppff();
+
     switch(msg_hdr->action) {
-        case AC_HELLO: {
-            checkStop(readMessageBody(socketConnection, &(risposta->bdy)) == 0, "errore lettura body hello");
-            break;
-        }
+        case AC_OPEN: { // O_CREATE = 1 | O_LOCK = 2 | O_CREATE && O_LOCK = 3
+            char* buffer = malloc(msg_bdy->length);
+            buffer = msg_bdy->buffer;
+            printf("Percorso: %s\n", msg_hdr->abs_path);
+            fflush(stdout);
 
-        case AC_STOPPING: {
-
+            if(msg_hdr->flags == 1 && ht_get(ht, msg_hdr->abs_path) != NULL) { // viene fatta una create con un path che esiste già
+                setMessageHeader(risposta, AC_FILEEXISTS, NULL, 0);
+            } else if (msg_hdr->flags == 2 && ht_get(ht, msg_hdr->abs_path) == NULL) { // viene fatta la lock su un file che non esiste <ancora>
+                setMessageHeader(risposta, AC_FILENOTEXISTS, NULL, 0);
+            } else {
+                stampaDebug("GC|EA> Sto per inserire un file!")
+                if(msg_hdr->flags == 2 || msg_hdr->flags == 3) {
+                    checkStop(ht_put(ht, msg_hdr->abs_path, buffer, socketConnection, (unsigned long)time(NULL)) == HT_ERROR, "impossibile allocare memoria al nuovo file (con lock)");
+                } else {
+                    checkStop(ht_put(ht, msg_hdr->abs_path, buffer, -1, (unsigned long)time(NULL)) == HT_ERROR, "impossibile allocare memoria al nuovo file (no lock)");
+                }
+                setMessageHeader(risposta, AC_FILERCVD, msg_hdr->abs_path, 0);
+            }
             break;
         }
 
         case AC_UNKNOWN: {
             break;
+        }
+
+        default: {
+            char* testo = "Mi dispiace, ma non so gestire questo tipo di richieste ora.";
+            setMessageHeader(risposta, AC_CANTDO, NULL, 0);
+            setMessageBody(risposta, strlen(testo), testo);
         }
     }
 
@@ -87,16 +111,19 @@ void* gestoreConnessione(void* unused) {
 
         Message* risposta = malloc(sizeof(Message));
         checkStop(risposta == NULL, "malloc risposta");
-        setMessageHeader(risposta, AC_UNKNOWN, NULL);
+        setMessageHeader(risposta, AC_UNKNOWN, NULL, 0);
         setMessageBody(risposta, 0, NULL);
 
         // INVIO MESSAGGIO DI BENVENUTO
         Message* benvenuto = malloc(sizeof(Message));
         checkStop(benvenuto == NULL, "malloc benvenuto");
 
+        benvenuto->bdy.length = 0;
+        benvenuto->bdy.buffer = NULL;
+
         char* testo_risposta = "Benvenuto, sono in attesa di tue richieste";
 
-        setMessageHeader(benvenuto, AC_WELCOME, "*unused*");
+        setMessageHeader(benvenuto, AC_WELCOME, "Ciao!", 0);
         setMessageBody(benvenuto, strlen(testo_risposta), testo_risposta);
 
         checkStop(sendMessage(socketConnection, benvenuto) != 0, "errore messaggio iniziale fallito");
@@ -114,35 +141,14 @@ void* gestoreConnessione(void* unused) {
             }
         }
 
-        stampaDebug("Ehi");
-
-        // ############# PROVA
-        while(TRUE) {
-            // controllo se c'è un segnale di terminazione
-            locka(mutexChiusura);
-            if(chiusuraForte) {
-                unlocka(mutexChiusura);
-                setMessageHeader(risposta, AC_STOPPING, "*unused*");
-                checkStop(sendMessage(socketConnection, risposta) != 0, "errore messaggio iniziale fallito");
-                checkStop(close(socketConnection) == -1, "chiusura connessione dopo segnale");
-
-                free(header);
-                free(body);
-                return (void*)NULL;
-            }
-            unlocka(mutexChiusura);
-        }
-        // ############# PROVA
-
-        // comunicazione iniziata!
+        // qui inizia la comunicazione dopo la conferma dei messaggi WELCOME ED HELLO
         esito = readMessageHeader(socketConnection, header);
         while(esito == 0) {
-            stampaDebug("Oi");
             // controllo se c'è un segnale di terminazione
             locka(mutexChiusura);
             if(chiusuraForte) {
                 unlocka(mutexChiusura);
-                setMessageHeader(risposta, AC_STOPPING, "*unused*");
+                setMessageHeader(risposta, AC_STOPPING, NULL, 0);
                 checkStop(sendMessage(socketConnection, risposta) != 0, "errore messaggio iniziale fallito");
                 checkStop(close(socketConnection) == -1, "chiusura connessione dopo segnale");
 
@@ -151,6 +157,13 @@ void* gestoreConnessione(void* unused) {
                 return (void*)NULL;
             }
             unlocka(mutexChiusura);
+
+            if(header->action == AC_OPEN) {
+                checkStop(readMessageBody(socketConnection, body) != 0, "richiesta AC_OPEN non valida (body richiesto)");
+            }
+            risposta = elaboraAzione(socketConnection, header, body);
+
+            checkStop(sendMessage(socketConnection, risposta) == -1, "errore invio messaggio");
 
             // richiesta dopo
             esito = readMessageHeader(socketConnection, header);
@@ -238,7 +251,6 @@ int main(int argc, char* argv[]) {
     checkStop(sigaddset(&insieme, SIGINT) == -1, "settaggio a 1 della flag per SIGINT");
     checkStop(sigaddset(&insieme, SIGHUP) == -1, "settaggio a 1 della flag per SIGTERM");
     checkStop(sigaddset(&insieme, SIGQUIT) == -1, "settaggio a 1 della flag per SIGQUIT");
-    // TODO
     checkStop(pthread_sigmask(SIG_SETMASK, &insieme, NULL) != 0, "rimozione mascheramento iniziale dei segnali ignorati o gestiti in modo custom");
 
 
@@ -250,6 +262,10 @@ int main(int argc, char* argv[]) {
     // crea coda connessione
     checkStop((coda_client = createQueue(config.max_connections)) == NULL, "creazione coda connessioni");
 
+    // creo tabella hash (salva i file)
+    ht = ht_create(config.max_files);
+    checkStop(ht == NULL, "creazione tabella hash");
+    
     /*========= CONNESSIONE =========*/
     unlink(config.socket_file_name); // FIXME da rimuovere quando sta roba sarà più stabile
     // 1. SOCKET

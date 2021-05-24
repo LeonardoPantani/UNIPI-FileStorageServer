@@ -71,8 +71,6 @@ int loadConfig(Config* conf) {
                         } else if(strcmp(variabile, "SOCKET_FILE_NAME") == 0) {
                             strcpy((*conf).socket_file_name, valore);
                             v++;
-                        } else {
-                            // TODO
                         }
                     } else {
                         return ERR_EMPTYVALUE; // value after = is empty

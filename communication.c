@@ -1,6 +1,9 @@
 /**
  * @file    communication.c
  * @brief   Contiene l'implementazione di alcune funzioni che permettono lo scambio di messaggi tra client e server.
+ * 
+ * NOTA: E' a più basso livello rispetto ai metodi di api.c, infatti vanno usate quelle per comunicare col server...
+ * ... mentre il server deve usare solamente queste per comunicare con il client.
 **/
 #include <stdio.h>
 #include <unistd.h>
@@ -8,6 +11,42 @@
 #include "utils/includes/macro.h"
 #include "utils/includes/utils.h"
 #include "communication.h"
+
+int setSocketAssociation(int fd, char* socketname) {
+    if(sockAssocArrIter >= 10) return -1;
+
+    SocketAssociation ass;
+    ass.fd = fd;
+    ass.socketname = socketname;
+
+    sockAssocArr[sockAssocArrIter] = ass;
+    sockAssocArrIter++;
+
+    return 0;
+}
+
+int removeSocketAssociation(char* socketname) {
+    for(int i = 0; i < sockAssocArrIter; i++) {
+        if(strcmp(sockAssocArr[i].socketname, socketname) == 0) {
+            sockAssocArr->fd = -1;
+            sockAssocArr->socketname = NULL;
+            sockAssocArrIter = i;
+            return 0;
+        }
+    }
+
+    return -1;
+}
+
+int searchAssocByName(char* socketname) {
+    for(int i = 0; i < sockAssocArrIter; i++) {
+        if(strcmp(sockAssocArr[i].socketname, socketname) == 0) {
+            return sockAssocArr[i].fd;
+        }
+    }
+
+    return -1;
+}
 
 int sendMessage(int fd, Message* msg) {
     checkM1(msg == NULL, "messaggio nullo");
@@ -47,6 +86,7 @@ int readMessageHeader(int fd, MessageHeader* msg_hdr) {
     }
 
     // leggo l'header del messaggio
+    printf("Dimensione msg: %d\n", ret); fflush(stdout);
     checkM1(ret != sizeof(MessageHeader), "lettura header"); 
     return 0;
 }
