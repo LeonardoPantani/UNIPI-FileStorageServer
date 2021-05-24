@@ -82,8 +82,6 @@ static int sendFilesList(char* nomeCartella, int numFiles) {
                 struct stat proprieta;
                 int esito = stat(path, &proprieta);
                 
-                //setMessageHeader(messaggio, AC_WRITE_RECU, path);
-                //setMessageBody(messaggio, proprieta.st_size, )
                 
                 if(numFiles != -1) numFiles--;
             }
@@ -96,7 +94,7 @@ static int sendFilesList(char* nomeCartella, int numFiles) {
 static int executeAction(ActionType ac, char* parameters) {
     switch(ac) {
         case AC_WRITE_RECU: {
-            return openFile(parameters, O_CREATE);
+            return openFile(parameters, O_CREATE|O_LOCK);
             /*
             char* savePointer;
             char* nomeCartella, *temp;
@@ -308,9 +306,9 @@ int main(int argc, char* argv[]) {
         setMessageHeader(risposta, AC_UNKNOWN, NULL, 0);
         setMessageBody(risposta, 0, NULL);
 
-        // Attendo il messaggio di benvenuto dal server
-        int esito = readMessageHeader(socketConnection, header);
 
+        // attendo il messaggio di benvenuto dal server
+        int esito = readMessageHeader(socketConnection, header);
         if(esito == 0) {
             if(header->action == AC_WELCOME) {
                 checkStop(readMessageBody(socketConnection, body) != 0, "welcome senza body");
@@ -327,41 +325,32 @@ int main(int argc, char* argv[]) {
                 checkStop(sendMessage(socketConnection, risposta) != 0, "risposta hello al server iniziale");
 
                 pp("CLIENT> Inviata risposta al server con successo!", CLR_SUCCESS);
+            } else if(header->action == AC_MAXCONNECTIONSREACHED) {
+                readMessageBody(socketConnection, body);
+
+                ppf(CLR_ERROR); printf("CLIENT> Il server ha raggiunto il limite massimo di connessioni.\n"); ppff();
             }
         }
 
-        for(int i = 0; i < actions; i++) {
-            if(executeAction(listaAzioni[i], listaParametri[i]) == 0) {
-                ppf(CLR_SUCCESS); printf("CLIENT> Operazione n°%d completata con successo.\n", listaAzioni[i]); ppff();
-            } else {
-                ppf(CLR_ERROR); printf("CLIENT> Operazione n°%d fallita. Esco!\n", listaAzioni[i]); ppff();
-                break;
+        // se l'ultima richiesta è stata una WELCOME (cioè il server ha accettato la connessione)
+        if(header->action == AC_WELCOME) {
+            // eseguo tutte le azioni richieste
+            for(int i = 0; i < actions; i++) {
+                if(executeAction(listaAzioni[i], listaParametri[i]) == 0) {
+                    ppf(CLR_SUCCESS); printf("CLIENT> Operazione n°%d completata con successo.\n", listaAzioni[i]); ppff();
+                } else {
+                    ppf(CLR_ERROR); printf("CLIENT> Operazione n°%d fallita. Esco!\n", listaAzioni[i]); ppff();
+                    break;
+                }
+
+                // sleep(3);
             }
         }
 
-        /*
-        // comunicazione iniziata!
-        stampaDebug("Aspetto prima richiesta");
-        esito = readMessageHeader(socketConnection, header);
-        while(esito == 0) {
-            if(header->action == AC_STOPPING) {
-                pp("CLIENT> Il server si sta arrestando, termino la comunicazione.", CLR_HIGHLIGHT);
-                break;
-            }
 
-            locka(mutexChiusura);
-            if(chiusuraForte) {
-                unlocka(mutexChiusura);
-                checkStop(close(socketConnection) == -1, "chiusura connessione dopo segnale");
-                return 0;
-            }
-            unlocka(mutexChiusura);
-            esito = readMessageHeader(socketConnection, header);
-        }
-        */
-        
+        // finite le azioni richieste, chiudo la connessione
 		if(closeConnection(socketPath) == 0) {
-            pp("CLIENT> Connessione terminata con successo.", CLR_SUCCESS);
+            pp("CLIENT> Connessione terminata con successo.", CLR_INFO);
         } else {
             pp("CLIENT> Connessione non terminata!!", CLR_ERROR);
         }

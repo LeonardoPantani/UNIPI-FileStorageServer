@@ -111,30 +111,38 @@ int openFile(const char* pathname, int flags) { // O_CREATE = 1 | O_LOCK = 2 | O
             // una volta inviata la richiesta di check del file
             int esito = readMessageHeader(socketConnection, header);
             if(esito == 0) {
+                int esito2 = readMessageBody(socketConnection, body);
                 switch(header->action) {
                     case AC_FILERCVD: {
-                        ppf(CLR_HIGHLIGHT); printf("CLIENT> File '%s' caricato!", pathname); ppff();
+                        ppf(CLR_HIGHLIGHT); printf("CLIENT> File '%s' caricato!\n", pathname); ppff();
                         break;
                     }
 
                     case AC_FILEEXISTS: {
-                        ppf(CLR_ERROR); printf("CLIENT> Il file '%s' esiste già, non puoi fare una CREATE.", pathname); ppff();
-                        return -1;
-
+                        ppf(CLR_ERROR); printf("CLIENT> Il file '%s' esiste già, non puoi fare una CREATE.\n", pathname); ppff();
                         break;
                     }
 
                     case AC_FILENOTEXISTS: {
-                        ppf(CLR_ERROR); printf("CLIENT> Il file '%s' non esiste, devi fare prima una CREATE.", pathname); ppff();
-                        return -1;
+                        ppf(CLR_ERROR); printf("CLIENT> Il file '%s' non esiste, devi fare prima una CREATE.\n", pathname); ppff();
+                        break;
+                    }
 
+                    case AC_MAXFILESREACHED: {
+                        ppf(CLR_ERROR); printf("CLIENT> Il file '%s' non può essere salvato perché il server ha raggiunto il numero massimo di file salvati.\n", pathname); ppff();
+                        break;
+                    }
+
+                    case AC_NOSPACELEFT: {
+                        ppf(CLR_ERROR); printf("CLIENT> Il file '%s' non può essere salvato perché il server non avrebbe più spazio disponibile in memoria.\n", pathname); ppff();
                         break;
                     }
 
                     default: {
-                        ppf(CLR_ERROR); printf("CLIENT> Risposta dal server non valida!"); ppff();
-                        return -1;
-                        
+                        if(esito2 != 0) {
+                            ppf(CLR_ERROR); printf("CLIENT> Il server ha mandato una risposta non valida: %s", body->buffer); ppff();
+                            break;
+                        }
                         break;
                     }
                 }
@@ -142,6 +150,7 @@ int openFile(const char* pathname, int flags) { // O_CREATE = 1 | O_LOCK = 2 | O
                 stampaDebug("errore risposta");
                 return -1;
             }
+            free(header);
         } else {
             stampaDebug("Impossibile inviare la richiesta di visione file!");
         }

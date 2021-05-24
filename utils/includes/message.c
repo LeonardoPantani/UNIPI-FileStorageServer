@@ -7,8 +7,15 @@
 
 static void setMessageHeader(Message* msg, ActionType ac, char* path, int flags) {
     msg->hdr.action   = ac;
-    msg->hdr.abs_path = path;
     msg->hdr.flags    = flags;
+
+    if(path != NULL) {
+        msg->hdr.path_length = strlen(path);
+    } else {
+        msg->hdr.path_length = 0;
+    }
+
+    msg->hdr.abs_path = path;
 }
 
 static void setMessageBody(Message* msg, int bdy_length, char* buffer) {

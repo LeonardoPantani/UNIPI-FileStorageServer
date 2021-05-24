@@ -10,8 +10,10 @@
 
 typedef struct {
     ActionType  action;
-    char*       abs_path;
     int         flags;
+
+    int         path_length;
+    char*       abs_path;
 } MessageHeader;
 
 

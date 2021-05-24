@@ -14,6 +14,12 @@
 #include "utils/includes/hash_table.c"
 #include "communication.c"
 #include "utils/includes/client_queue.c"
+#include "utils/includes/statistics.c"
+
+Config config;
+
+Statistics stats = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+pthread_mutex_t mutexStatistiche = PTHREAD_MUTEX_INITIALIZER;
 
 hashtable_t *ht = NULL;
 int lockHT = -1;
@@ -36,27 +42,52 @@ static Message* elaboraAzione(int socketConnection, MessageHeader* msg_hdr, Mess
     setMessageHeader(risposta, AC_UNKNOWN, msg_hdr->abs_path, 0);
     setMessageBody(risposta, 0, NULL);
 
-    ppf(CLR_INFO); printf("GC|EA> Arrivata richiesta di tipo: %d!\n", msg_hdr->action); ppff();
-
     switch(msg_hdr->action) {
         case AC_OPEN: { // O_CREATE = 1 | O_LOCK = 2 | O_CREATE && O_LOCK = 3
             char* buffer = malloc(msg_bdy->length);
             buffer = msg_bdy->buffer;
-            printf("Percorso: %s\n", msg_hdr->abs_path);
-            fflush(stdout);
+
+            if(stats.current_files_saved + 1 > config.max_files) { // se supererei il numero di file massimi salvati
+                setMessageHeader(risposta, AC_MAXFILESREACHED, msg_hdr->abs_path, 0);
+                break;
+            }
+
+            if(stats.current_bytes_used + sizeof(buffer) > config.max_memory_size) { // se supererei il limite di byte salvati
+                setMessageHeader(risposta, AC_NOSPACELEFT, msg_hdr->abs_path, 0);
+                break;
+            }
 
             if(msg_hdr->flags == 1 && ht_get(ht, msg_hdr->abs_path) != NULL) { // viene fatta una create con un path che esiste già
-                setMessageHeader(risposta, AC_FILEEXISTS, NULL, 0);
-            } else if (msg_hdr->flags == 2 && ht_get(ht, msg_hdr->abs_path) == NULL) { // viene fatta la lock su un file che non esiste <ancora>
-                setMessageHeader(risposta, AC_FILENOTEXISTS, NULL, 0);
+                setMessageHeader(risposta, AC_FILEEXISTS, msg_hdr->abs_path, 0);
+                ppf(CLR_ERROR); printf("GC|EA> Impossibile aggiungere file '%s' nella hash table: esiste già\n", msg_hdr->abs_path); ppff();
+            } else if (msg_hdr->flags == 2 && ht_get(ht, msg_hdr->abs_path) == NULL) { // viene fatta la lock su un file che non esiste ancora
+                setMessageHeader(risposta, AC_FILENOTEXISTS, msg_hdr->abs_path, 0);
+                ppf(CLR_ERROR); printf("GC|EA> Impossibile aggiungere file '%s' nella hash table: lock su file che non esiste\n", msg_hdr->abs_path); ppff();
             } else {
-                stampaDebug("GC|EA> Sto per inserire un file!")
-                if(msg_hdr->flags == 2 || msg_hdr->flags == 3) {
+                if(msg_hdr->flags == 2 || msg_hdr->flags == 3) { // file creato in stato di lock
                     checkStop(ht_put(ht, msg_hdr->abs_path, buffer, socketConnection, (unsigned long)time(NULL)) == HT_ERROR, "impossibile allocare memoria al nuovo file (con lock)");
-                } else {
+                    ppf(CLR_SUCCESS); printf("GC|EA> Inserito e bloccato file '%s' nella hash table.\n", msg_hdr->abs_path); ppff();
+                } else { // file creato senza lock
                     checkStop(ht_put(ht, msg_hdr->abs_path, buffer, -1, (unsigned long)time(NULL)) == HT_ERROR, "impossibile allocare memoria al nuovo file (no lock)");
+                    ppf(CLR_SUCCESS); printf("GC|EA> Inserito file '%s' nella hash table.\n", msg_hdr->abs_path); ppff();
                 }
                 setMessageHeader(risposta, AC_FILERCVD, msg_hdr->abs_path, 0);
+
+                // aggiorno le statistiche all'immissione di un file
+                locka(mutexStatistiche);
+                // aggiorno i file salvati
+                stats.current_files_saved++;
+                if(stats.current_files_saved > stats.max_file_number_reached) {
+                    stats.max_file_number_reached = stats.current_files_saved;
+                }
+                // aggiorno i byte usati
+                stats.current_bytes_used = stats.current_bytes_used + sizeof(buffer);
+                printf("spazio usato: %d\n", stats.current_bytes_used);
+                if(stats.current_bytes_used > stats.max_size_reached) {
+                    stats.max_size_reached = stats.current_bytes_used;
+                }
+                unlocka(mutexStatistiche);
+                
             }
             break;
         }
@@ -114,7 +145,7 @@ void* gestoreConnessione(void* unused) {
         setMessageHeader(risposta, AC_UNKNOWN, NULL, 0);
         setMessageBody(risposta, 0, NULL);
 
-        // INVIO MESSAGGIO DI BENVENUTO
+        // invio messaggio di benvenuto al client
         Message* benvenuto = malloc(sizeof(Message));
         checkStop(benvenuto == NULL, "malloc benvenuto");
 
@@ -123,14 +154,15 @@ void* gestoreConnessione(void* unused) {
 
         char* testo_risposta = "Benvenuto, sono in attesa di tue richieste";
 
-        setMessageHeader(benvenuto, AC_WELCOME, "Ciao!", 0);
+        setMessageHeader(benvenuto, AC_WELCOME, NULL, 0);
         setMessageBody(benvenuto, strlen(testo_risposta), testo_risposta);
 
         checkStop(sendMessage(socketConnection, benvenuto) != 0, "errore messaggio iniziale fallito");
         pp("GC> Benvenuto inviato al client, attendo una risposta...", CLR_INFO);
 
+        
+        // attendo la risposta del client al mio benvenuto
         int esito = readMessageHeader(socketConnection, header);
-
         if(esito == 0) {
             if(header->action == AC_HELLO) {
                 if(readMessageBody(socketConnection, body) != 0) {
@@ -141,9 +173,11 @@ void* gestoreConnessione(void* unused) {
             }
         }
 
+        
         // qui inizia la comunicazione dopo la conferma dei messaggi WELCOME ED HELLO
         esito = readMessageHeader(socketConnection, header);
         while(esito == 0) {
+            ppf(CLR_INFO); printf("GC> Arrivata richiesta di tipo: %d!\n", header->action); ppff();
             // controllo se c'è un segnale di terminazione
             locka(mutexChiusura);
             if(chiusuraForte) {
@@ -167,7 +201,12 @@ void* gestoreConnessione(void* unused) {
 
             // richiesta dopo
             esito = readMessageHeader(socketConnection, header);
-        }  
+        }
+
+        locka(mutexStatistiche);
+        stats.current_connections--;
+        unlocka(mutexStatistiche);
+        stampaDebug("GC> Connessione chiusa!");
     }
     return (void*) NULL; // non proprio necessario
 }
@@ -188,6 +227,30 @@ void *gestorePool(void* socket) {
         int socketConnection = accept(socket_fd, NULL, NULL);
         checkStop(socketConnection == -1, "accept nuova connessione da client");
         stampaDebug("GP> Connessione accettata a un client.");
+
+        // controllo se ho già raggiunto il limite massimo di connessioni contemporanee
+        locka(mutexStatistiche);
+        if(stats.current_connections == config.max_connections) {
+            unlocka(mutexStatistiche);
+            ppf(CLR_ERROR); printf("GP> Raggiuto il limite di connessioni contemporanee. Invio messaggio di errore.\n"); ppff();
+        
+            Message* risposta = malloc(sizeof(Message));
+            checkStop(risposta == NULL, "malloc errore max connessioni");
+
+            setMessageHeader(risposta, AC_MAXCONNECTIONSREACHED, NULL, 0);
+
+            risposta->bdy.length = 0;
+            risposta->bdy.buffer = NULL;
+
+            checkStop(sendMessage(socketConnection, risposta) != 0, "messaggio connessioni max raggiunto");
+            free(risposta);
+            continue;
+        }
+
+        stats.current_connections++;
+        if(stats.current_connections > stats.max_concurrent_connections)
+            stats.max_concurrent_connections = stats.current_connections;
+        unlocka(mutexStatistiche);
 
         locka(mutexCodaClient);
         checkStop(addToQueue(coda_client, socketConnection) == -1, "impossibile aggiungere alla coda dei client in attesa");
@@ -253,8 +316,6 @@ int main(int argc, char* argv[]) {
     checkStop(sigaddset(&insieme, SIGQUIT) == -1, "settaggio a 1 della flag per SIGQUIT");
     checkStop(pthread_sigmask(SIG_SETMASK, &insieme, NULL) != 0, "rimozione mascheramento iniziale dei segnali ignorati o gestiti in modo custom");
 
-
-    Config config;
 
     pp("---- INIZIO SERVER ----", CLR_INFO);
     configLoader(&config);

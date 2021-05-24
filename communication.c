@@ -55,16 +55,34 @@ int sendMessage(int fd, Message* msg) {
     int ret = write(fd, &(msg->hdr), sizeof(MessageHeader));
     checkM1(ret != sizeof(MessageHeader), "scrittura fallita header");
 
+    #ifdef DEBUG_VERBOSE
+        printf("Send message>> BYTE SCRITTI (header) (%d): %d\n", msg->hdr.action, ret); fflush(stdout);
+    #endif
+
+    // se la lunghezza del percorso è diversa da 0 allora mando i dati
+    if(msg->hdr.path_length != 0) {
+        ret = write(fd, msg->hdr.abs_path, msg->hdr.path_length);
+        checkM1(ret != msg->hdr.path_length, "scrittura fallita path");
+
+        #ifdef DEBUG_VERBOSE
+            printf("Send message>> BYTE SCRITTI (path) (%d): %d\n", msg->hdr.action, ret); fflush(stdout);
+        #endif
+    }
+
     // scrivo lunghezza body
     ret = write(fd, &(msg->bdy.length), sizeof(int));
     checkM1(ret != sizeof(int), "scrittura fallita dimensione testo");
+
+    #ifdef DEBUG_VERBOSE
+        printf("Send message>> BYTE SCRITTI (lung body) (%d): %d\n", msg->hdr.action, ret); fflush(stdout);
+    #endif
 
     // se la lunghezza del messaggio è 0 o il buffer è NULL allora ho finito
     if(msg->bdy.length == 0 || msg->bdy.buffer == NULL) {
         return 0;
     }
 
-    // scrivo dati dinamicamente
+    // scrivo il buffer sul socket dinamicamente
     int remainingBytes = msg->bdy.length;
     char* writePointer = msg->bdy.buffer;
     while(remainingBytes > 0) {
@@ -73,6 +91,10 @@ int sendMessage(int fd, Message* msg) {
 
         remainingBytes = remainingBytes - ret;
         writePointer = writePointer + ret;
+
+        #ifdef DEBUG_VERBOSE
+            printf("Send message>> BYTE SCRITTI (body) (%d): %d\n", msg->hdr.action, ret); fflush(stdout);
+        #endif
     }
     return 0;
 }
@@ -80,14 +102,32 @@ int sendMessage(int fd, Message* msg) {
 int readMessageHeader(int fd, MessageHeader* msg_hdr) {
     checkM1(msg_hdr == NULL, "hdr nullo");
 
-    int ret = read(fd, msg_hdr, sizeof(MessageHeader));
-    if(ret == 0) {
-        return 1; // connessione chiusa dall'altro partecipante (nessun byte letto)
-    }
-
     // leggo l'header del messaggio
-    printf("Dimensione msg: %d\n", ret); fflush(stdout);
-    checkM1(ret != sizeof(MessageHeader), "lettura header"); 
+    int l, ret;
+    ret = read(fd, msg_hdr, sizeof(MessageHeader));
+
+    #ifdef DEBUG_VERBOSE
+        printf("Read header>> BYTE LETTI (header) (%d): %d\n", msg_hdr->action, ret); fflush(stdout);
+    #endif
+
+    if(ret == 0) return 1; // connessione chiusa dall'altro partecipante (nessun byte letto)
+
+    // controllo la lunghezza se è stato ricevuto tutto l'header
+    checkM1(ret != sizeof(MessageHeader), "lettura header");
+
+    // se la lunghezza del percorso è diversa da 0 allora leggo i dati in arrivo
+    if(msg_hdr->path_length != 0) {
+        msg_hdr->abs_path = malloc(msg_hdr->path_length);
+
+        ret = read(fd, msg_hdr->abs_path, msg_hdr->path_length);
+        if(ret == 0) {
+            return 1; // connessione chiusa dall'altro partecipante (nessun byte letto)
+        }
+
+        #ifdef DEBUG_VERBOSE
+            printf("Read header>> BYTE LETTI (path) (%d): %d\n", msg_hdr->action, ret); fflush(stdout);
+        #endif
+    }
     return 0;
 }
 
@@ -100,6 +140,10 @@ int readMessageBody(int fd, MessageBody* msg_bdy) {
     ret = read(fd, &l, sizeof(int));
     checkM1(ret != sizeof(int), "lettura lunghezza buffer");
     msg_bdy->length = l;
+
+    #ifdef DEBUG_VERBOSE
+        printf("Read body>> BYTE LETTI (lung body): %d\n", ret); fflush(stdout); 
+    #endif
 
     if(l == 0) return -2; // se la lunghezza del body è 0 restituisco -2 (differenziato rispetto a -1 = errore)
 
@@ -117,6 +161,10 @@ int readMessageBody(int fd, MessageBody* msg_bdy) {
 
         remainingBytes = remainingBytes - ret;
         writePointer = writePointer + ret;
+
+        #ifdef DEBUG_VERBOSE
+            printf("Read body>> BYTE LETTI (body): %d\n", ret); fflush(stdout);
+        #endif
     }
     return 0;
 }
