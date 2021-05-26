@@ -61,20 +61,10 @@ int sendMessage(int fd, Message* msg);
  * @brief Legge un header dal descrittore file
  * 
  * @param fd        Descrittore da cui ricevere l'header
- * @param msg_hdr   Puntatore su dove salvare l'header
+ * @param msg   Puntatore su dove salvare l'header
  * 
  * @returns 0 in caso di successo, -1 in caso di fallimento
 **/
-int readMessageHeader(int fd, MessageHeader* msg_hdr);
-
-/**
- * @brief Legge il body dal descrittore file
- * 
- * @param fd        Descrittore da cui ricevere il body
- * @param msg_bdy   Puntatore su dove salvare il body
- * 
- * @returns 0 in caso di successo, -1 in caso di fallimento
-**/
-int readMessageBody(int fd, MessageBody* msg_bdy);
+int readMessage(int fd, Message* msg);
 
 #endif /* COMMUNICATION_H_ */

@@ -35,96 +35,86 @@ pthread_cond_t clientInAttesa = PTHREAD_COND_INITIALIZER;
 int chiusuraForte  = FALSE;
 int chiusuraDebole = FALSE;
 
-static Message* elaboraAzione(int socketConnection, MessageHeader* msg_hdr, MessageBody* msg_bdy) {
+static int checkLimits(Message* msg) {
+    if(stats.current_bytes_used + msg->data_length > config.max_memory_size) { // l'inserimento del file causerebbe sforamento limiti memoria
+        return -1;
+    } else if(stats.current_files_saved + 1 > config.max_files) { // l'inserimento del file causerebbe sforamento limiti quantità file
+        return -2;
+    } else { // l'inserimento del file non causerebbe problemi
+        return 0;
+    }
+}
+
+static Message* elaboraAzione(int socketConnection, Message* msg) {
+    // creo variabile per contenere richieste
     Message* risposta = malloc(sizeof(Message));
-    checkStop(risposta == NULL, "malloc risposta elaboraAzione");
+    checkStop(risposta == NULL, "malloc risposta");
+    // fine variabile per contenere richieste
 
-    setMessageHeader(risposta, AC_UNKNOWN, msg_hdr->abs_path, 0);
-    setMessageBody(risposta, 0, NULL);
+    setMessage(risposta, AC_UNKNOWN, 0, NULL, NULL, 0);
 
-    switch(msg_hdr->action) {
+    switch(msg->action) {
         case AC_OPEN: { // O_CREATE = 1 | O_LOCK = 2 | O_CREATE && O_LOCK = 3
-            char* buffer = malloc(msg_bdy->length);
-            buffer = msg_bdy->buffer;
+            char* buffer = malloc(msg->data_length);
+            buffer = msg->data;
 
-            /* =========== CONTROLLO CHE IL NUMERO DI FILE CON QUELLO NUOVO NON SUPERI IL LIMITE ================== */
-            if(stats.current_files_saved + 1 > config.max_files) { // se supererei il numero di file massimi salvati
-                hash_elem_t* e = ht_find_old_entry(ht);
-
-                //stampaDebug("flush start");
-                setMessageHeader(risposta, AC_FLUSH_START, NULL, 0);
-                setMessageBody(risposta, 0, NULL);
+            /* =========== CONTROLLI VARI ================== */
+            int controllo = checkLimits(msg), pulizia = FALSE;
+            
+            if(controllo != 0) {
+                ppf(CLR_HIGHLIGHT); printf("GC|EA> Controllo limitazioni: "); if(controllo == -1) { printf("sforamento memoria.\n"); } else if(controllo == -2) {  printf("sforamento limite files.\n"); } fflush(stdout);
+                setMessage(risposta, AC_FLUSH_START, 0, NULL, NULL, 0);
                 checkStop(sendMessage(socketConnection, risposta) == -1, "errore invio messaggio inizio flush");
-
-                ppf(CLR_ERROR); printf("GC|EA> Ho eliminato il file '%s' per inserire il file '%s' nella hash table: avrei raggiunto il limite di %d file in memoria\n", e->path, msg_hdr->abs_path, config.max_files); ppff();
-
-                ht_remove(ht, e->key);
-                locka(mutexStatistiche);
-                stats.current_files_saved--;
-                unlocka(mutexStatistiche);
-
-                //stampaDebug("flush file");
-                setMessageHeader(risposta, AC_FLUSHEDFILE, e->path, 0);
-                setMessageBody(risposta, strlen(e->data), e->data);
-                checkStop(sendMessage(socketConnection, risposta) == -1, "errore invio messaggio con file flushato");
-
-                //stampaDebug("flush end");
-                setMessageHeader(risposta, AC_FLUSH_END, NULL, 0);
-                setMessageBody(risposta, 0, NULL);
-                checkStop(sendMessage(socketConnection, risposta) == -1, "errore invio messaggio fine flush");
-                free(e);
             }
 
-            /* =========== CONTROLLO CHE IL NUMERO DI BYTE UTILIZZATI NON SUPERI IL LIMITE ================== */
-            int pulizia = FALSE;
-            if(stats.current_bytes_used + msg_bdy->length > config.max_memory_size) {
+            while(controllo != 0 && ht->e_num != 0) { // devo vedere se il numero di file non è 0 altrimenti non riesco a trovare un valore vecchio sotto ed esplodo
                 pulizia = TRUE;
-                setMessageHeader(risposta, AC_FLUSH_START, NULL, 0);
-                setMessageBody(risposta, 0, NULL);
-                checkStop(sendMessage(socketConnection, risposta) == -1, "errore invio messaggio inizio flush");
-            }
-
-            while(stats.current_bytes_used + msg_bdy->length > config.max_memory_size) { // se supererei il limite di byte salvati libero spazio
                 hash_elem_t* e = ht_find_old_entry(ht);
 
-                ppf(CLR_ERROR); printf("GC|EA> Ho eliminato il file '%s' (%ld bytes) per inserire il file '%s' nella hash table: avrei sforato (%ld bytes) il limite di %d bytes occupati in memoria\n", e->path, strlen(e->data), msg_hdr->abs_path, (strlen(e->data)+stats.current_bytes_used), config.max_memory_size); ppff();
-
-                ht_remove(ht, e->key);
                 locka(mutexStatistiche);
-                stats.current_bytes_used = stats.current_bytes_used - msg_bdy->length;
+                if(controllo == -1) {
+                    ppf(CLR_ERROR); printf("GC|EA> File '%s' (%ld bytes) eliminato per mettere '%s' nella HT: avrei sforato (%d bytes) il limite di %d bytes\n", e->path, e->data_length, msg->path, (msg->data_length+stats.current_bytes_used), config.max_memory_size); fflush(stdout); ppff();
+                    stats.current_bytes_used = stats.current_bytes_used - e->data_length;
+                } else if(controllo == -2) {
+                    ppf(CLR_ERROR); printf("GC|EA> File '%s' (%ld bytes) eliminato per mettere '%s' nella HT: avrei raggiunto il limite di %d file\n", e->path, e->data_length, msg->path, config.max_files); fflush(stdout); ppff();
+                    stats.current_files_saved--;
+                }
                 unlocka(mutexStatistiche);
 
-                //stampaDebug("flush file");
-                setMessageHeader(risposta, AC_FLUSHEDFILE, e->path, 0);
-                setMessageBody(risposta, msg_bdy->length, msg_bdy->buffer);
+                setMessage(risposta, AC_FLUSHEDFILE, 0, e->path, e->data, e->data_length);
                 checkStop(sendMessage(socketConnection, risposta) == -1, "errore invio messaggio con file flushato");
+
+                ht_remove(ht, e->path);
                 free(e);
+
+                // rieseguo controllo
+                controllo = checkLimits(msg);
             }
 
             if(pulizia) {
-                //stampaDebug("flush end");
-                setMessageHeader(risposta, AC_FLUSH_END, NULL, 0);
-                setMessageBody(risposta, 0, NULL);
+                setMessage(risposta, AC_FLUSH_END, 0, NULL, NULL, 0);
                 checkStop(sendMessage(socketConnection, risposta) == -1, "errore invio messaggio fine flush");
             }
+            /* =========== FINE CONTROLLI VARI ================== */
+
 
             /* =========== CONTROLLO CHE LE FLAG SIANO UTILIZZATE CORRETTAMENTE ================== */
-            if(ht_get(ht, msg_hdr->abs_path) != NULL) { // viene fatta una create con un path che esiste già
-                setMessageHeader(risposta, AC_FILEEXISTS, msg_hdr->abs_path, 0);
-                ppf(CLR_ERROR); printf("GC|EA> Impossibile aggiungere file '%s' nella hash table: esiste già\n", msg_hdr->abs_path); ppff();
-            } else if (msg_hdr->flags == 2 && ht_get(ht, msg_hdr->abs_path) == NULL) { // viene fatta la lock su un file che non esiste ancora
-                setMessageHeader(risposta, AC_FILENOTEXISTS, msg_hdr->abs_path, 0);
-                ppf(CLR_ERROR); printf("GC|EA> Impossibile aggiungere file '%s' nella hash table: lock su file che non esiste\n", msg_hdr->abs_path); ppff();
+            if(ht_get(ht, msg->path) != NULL) { // viene fatta una create con un path che esiste già
+                setMessage(risposta, AC_FILEEXISTS, 0, NULL, NULL, 0);
+                ppf(CLR_ERROR); printf("GC|EA> Impossibile aggiungere file '%s' nella hash table: esiste già\n", msg->path); ppff();
+            } else if (msg->flags == 2 && ht_get(ht, msg->path) == NULL) { // viene fatta la lock su un file che non esiste ancora
+                setMessage(risposta, AC_FILENOTEXISTS, 0, NULL, NULL, 0);
+                ppf(CLR_ERROR); printf("GC|EA> Impossibile aggiungere file '%s' nella hash table: lock su file che non esiste\n", msg->path); ppff();
             } else {
                 /* =========== AGGIUNGO UN FILE (CON LOCK O SENZA LOCK) ================== */
-                if(msg_hdr->flags == 2 || msg_hdr->flags == 3) { // file creato in stato di lock
-                    checkStop(ht_put(ht, msg_hdr->abs_path, buffer, socketConnection, (unsigned long)time(NULL), socketConnection) == HT_ERROR, "impossibile allocare memoria al nuovo file (con lock)");
-                    ppf(CLR_SUCCESS); printf("GC|EA> Inserito e bloccato file '%s' nella hash table.\n", msg_hdr->abs_path); ppff();
+                if(msg->flags == 2 || msg->flags == 3) { // file creato in stato di lock
+                    checkStop(ht_put(ht, msg->path, buffer, msg->data_length, socketConnection, (unsigned long)time(NULL), socketConnection) == HT_ERROR, "impossibile allocare memoria al nuovo file (con lock)");
+                    ppf(CLR_SUCCESS); printf("GC|EA> Inserito e bloccato file '%s' nella hash table.\n", msg->path); ppff();
                 } else { // file creato senza lock
-                    checkStop(ht_put(ht, msg_hdr->abs_path, buffer, -1, (unsigned long)time(NULL), socketConnection) == HT_ERROR, "impossibile allocare memoria al nuovo file (no lock)");
-                    ppf(CLR_SUCCESS); printf("GC|EA> Inserito file '%s' nella hash table.\n", msg_hdr->abs_path); ppff();
+                    checkStop(ht_put(ht, msg->path, buffer, msg->data_length, -1, (unsigned long)time(NULL), socketConnection) == HT_ERROR, "impossibile allocare memoria al nuovo file (no lock)");
+                    ppf(CLR_SUCCESS); printf("GC|EA> Inserito file '%s' nella hash table.\n", msg->path); ppff();
                 }
-                setMessageHeader(risposta, AC_FILERCVD, msg_hdr->abs_path, 0);
+                setMessage(risposta, AC_FILERCVD, 0, NULL, NULL, 0);
 
                 // aggiorno le statistiche all'immissione di un file
                 locka(mutexStatistiche);
@@ -134,7 +124,7 @@ static Message* elaboraAzione(int socketConnection, MessageHeader* msg_hdr, Mess
                     stats.max_file_number_reached = stats.current_files_saved;
                 }
                 // aggiorno i byte usati
-                stats.current_bytes_used = stats.current_bytes_used + msg_bdy->length;
+                stats.current_bytes_used = stats.current_bytes_used + msg->data_length;
                 if(stats.current_bytes_used > stats.max_size_reached) {
                     stats.max_size_reached = stats.current_bytes_used;
                 }
@@ -144,32 +134,30 @@ static Message* elaboraAzione(int socketConnection, MessageHeader* msg_hdr, Mess
         }
 
         case AC_READ: {
-            printf("Ricerca del file con percorso '%s' in corso...\n", msg_hdr->abs_path);
-            void* dati = ht_get(ht, msg_hdr->abs_path);
+            printf("Ricerca del file con percorso '%s' in corso...\n", msg->path);
+            void* dati = ht_get(ht, msg->path);
+            printf("DATI CONTENUTI: %s\n", (char*)dati);
             if(dati != NULL) { // mando il file
-                setMessageHeader(risposta, AC_FILESVD, msg_hdr->abs_path, 0);
-                setMessageBody(risposta, strlen(dati), dati);      
+                setMessage(risposta, AC_FILESVD, 0, msg->path, dati, msg->data_length);
             } else {
-                setMessageHeader(risposta, AC_FILENOTEXISTS, msg_hdr->abs_path, 0);
-                setMessageBody(risposta, 0, NULL);
+                setMessage(risposta, AC_FILENOTEXISTS, 0, NULL, NULL, 0);
             }
             break;
         }
 
         case AC_UNKNOWN: {
             char* testo = "Hai inviato una richiesta non valida.";
-            setMessageHeader(risposta, AC_CANTDO, NULL, 0);
-            setMessageBody(risposta, strlen(testo), testo);
+            setMessage(risposta, AC_CANTDO, 0, NULL, NULL, 0);
             break;
         }
 
         default: {
             char* testo = "Mi dispiace, ma non so gestire questo tipo di richieste ora.";
-            setMessageHeader(risposta, AC_CANTDO, NULL, 0);
-            setMessageBody(risposta, strlen(testo), testo);
+            setMessage(risposta, AC_CANTDO, 0, NULL, testo, strlen(testo));
         }
     }
 
+    /*
     printf("---- LISTA ELEMENTI ----\n");
     fflush(stdout);
 	hash_elem_it it2 = HT_ITERATOR(ht);
@@ -180,6 +168,7 @@ static Message* elaboraAzione(int socketConnection, MessageHeader* msg_hdr, Mess
         fflush(stdout);
 		k = ht_iterate_keys(&it2);
 	}
+    */
 
     return risposta;
 }
@@ -209,76 +198,59 @@ void* gestoreConnessione(void* unused) {
         unlocka(mutexCodaClient);
         checkStop(socketConnection == -1, "rimozione primo elemento dalla coda in attesa fallita");
         stampaDebug("GC> Connessione ottenuta dalla coda.");
+        
 
         // === INIZIO A SERVIRE IL CLIENT ===
-        // creo variabili per contenere risposte
-        MessageHeader* header = malloc(sizeof(MessageHeader));
-        checkStop(header == NULL, "malloc header");
-
-        MessageBody* body = malloc(sizeof(MessageBody));
-        checkStop(body == NULL, "malloc body");
-
-        Message* risposta = malloc(sizeof(Message));
-        checkStop(risposta == NULL, "malloc risposta");
-        setMessageHeader(risposta, AC_UNKNOWN, NULL, 0);
-        setMessageBody(risposta, 0, NULL);
+        // creo variabile per contenere richieste
+        Message* msg = malloc(sizeof(Message));
+        checkStop(msg == NULL, "malloc risposta");
+        // fine variabile per contenere richieste
+        setMessage(msg, AC_UNKNOWN, 0, NULL, NULL, 0);
 
         // invio messaggio di benvenuto al client
         Message* benvenuto = malloc(sizeof(Message));
         checkStop(benvenuto == NULL, "malloc benvenuto");
 
-        benvenuto->bdy.length = 0;
-        benvenuto->bdy.buffer = NULL;
+        benvenuto->data_length = 0;
+        benvenuto->data = NULL;
 
-        char* testo_risposta = "Benvenuto, sono in attesa di tue richieste";
+        char* testo_msg = "Benvenuto, sono in attesa di tue richieste";
 
-        setMessageHeader(benvenuto, AC_WELCOME, NULL, 0);
-        setMessageBody(benvenuto, strlen(testo_risposta), testo_risposta);
+        setMessage(benvenuto, AC_WELCOME, 0, NULL, testo_msg, strlen(testo_msg));
 
         checkStop(sendMessage(socketConnection, benvenuto) != 0, "errore messaggio iniziale fallito");
-        pp("GC> Benvenuto inviato al client, attendo una risposta...", CLR_INFO);
+        pp("GC> WELCOME inviato al client, attendo una risposta HELLO...", CLR_INFO);
 
         
-        // attendo la risposta del client al mio benvenuto
-        int esito = readMessageHeader(socketConnection, header);
-        if(esito == 0) {
-            if(header->action == AC_HELLO) {
-                if(readMessageBody(socketConnection, body) != 0) {
-                    pp("GC> Il client ha mandato un AC_HELLO senza body non valido!", CLR_ERROR);
-                    break;
-                }
-                ppf(CLR_SUCCESS); fprintf(stdout, "GC> Il client ha risposto al WELCOME: %s. Inizio comunicazione.\n", body->buffer); ppff();
-            }
-        }
+        // attendo la msg del client al mio benvenuto
+        int esito = readMessage(socketConnection, msg);
+        checkStop(esito != 0 || msg->action != AC_HELLO, "risposta WELCOME iniziale")
+        ppf(CLR_SUCCESS); fprintf(stdout, "GC> Il client ha risposto al WELCOME: %s. Inizio comunicazione.\n", msg->data); ppff();
 
         
         // qui inizia la comunicazione dopo la conferma dei messaggi WELCOME ED HELLO
-        esito = readMessageHeader(socketConnection, header);
+        esito = readMessage(socketConnection, msg);
         while(esito == 0) {
-            ppf(CLR_INFO); printf("GC> Arrivata richiesta di tipo: %d!\n", header->action); ppff();
+            ppf(CLR_INFO); printf("GC> Arrivata richiesta di tipo: %d!\n", msg->action); ppff();
+
             // controllo se c'è un segnale di terminazione
             locka(mutexChiusura);
             if(chiusuraForte) {
                 unlocka(mutexChiusura);
-                setMessageHeader(risposta, AC_STOPPING, NULL, 0);
-                checkStop(sendMessage(socketConnection, risposta) != 0, "errore messaggio iniziale fallito");
+                setMessage(msg, AC_STOPPING, 0, NULL, NULL, 0);
+                checkStop(sendMessage(socketConnection, msg) != 0, "errore messaggio iniziale fallito");
                 checkStop(close(socketConnection) == -1, "chiusura connessione dopo segnale");
 
-                free(header);
-                free(body);
                 return (void*)NULL;
             }
             unlocka(mutexChiusura);
 
-            stampaDebug("priam del body");
-            int esito2 = readMessageBody(socketConnection, body);
-            stampaDebug("dopo il body");
-            risposta = elaboraAzione(socketConnection, header, body);
+            msg = elaboraAzione(socketConnection, msg);
 
-            checkStop(sendMessage(socketConnection, risposta) == -1, "errore invio messaggio");
+            checkStop(sendMessage(socketConnection, msg) == -1, "errore invio messaggio");
 
             // richiesta dopo
-            esito = readMessageHeader(socketConnection, header);
+            esito = readMessage(socketConnection, msg);
         }
 
         locka(mutexStatistiche);
@@ -312,16 +284,16 @@ void *gestorePool(void* socket) {
             unlocka(mutexStatistiche);
             ppf(CLR_ERROR); printf("GP> Raggiuto il limite di connessioni contemporanee. Invio messaggio di errore.\n"); ppff();
         
-            Message* risposta = malloc(sizeof(Message));
-            checkStop(risposta == NULL, "malloc errore max connessioni");
+            Message* msg = malloc(sizeof(Message));
+            checkStop(msg == NULL, "malloc errore max connessioni");
 
-            setMessageHeader(risposta, AC_MAXCONNECTIONSREACHED, NULL, 0);
+            setMessage(msg, AC_MAXCONNECTIONSREACHED, 0, NULL, NULL, 0);
 
-            risposta->bdy.length = 0;
-            risposta->bdy.buffer = NULL;
+            msg->data_length = 0;
+            msg->data = NULL;
 
-            checkStop(sendMessage(socketConnection, risposta) != 0, "messaggio connessioni max raggiunto");
-            free(risposta);
+            checkStop(sendMessage(socketConnection, msg) != 0, "messaggio connessioni max raggiunto");
+            free(msg);
             continue;
         }
 
@@ -402,7 +374,7 @@ int main(int argc, char* argv[]) {
     checkStop((coda_client = createQueue(config.max_connections)) == NULL, "creazione coda connessioni");
 
     // creo tabella hash (salva i file)
-    ht = ht_create(config.max_files);
+    ht = ht_create(config.max_files+10);
     checkStop(ht == NULL, "creazione tabella hash");
     
     /*========= CONNESSIONE =========*/

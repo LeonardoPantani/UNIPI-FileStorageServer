@@ -5,20 +5,18 @@
 
 #include "message.h"
 
-static void setMessageHeader(Message* msg, ActionType ac, char* path, int flags) {
-    msg->hdr.action   = ac;
-    msg->hdr.flags    = flags;
+static void setMessage(Message* msg, ActionType ac, int flags, char* path, void* data, size_t data_length) {
+    msg->action = ac;
 
     if(path != NULL) {
-        msg->hdr.path_length = strlen(path);
+        msg->path_length = strlen(path);
     } else {
-        msg->hdr.path_length = 0;
+        msg->path_length = 0;
     }
+    msg->path = path;
 
-    msg->hdr.abs_path = path;
-}
+    msg->data_length = data_length;
+    msg->data = data;
 
-static void setMessageBody(Message* msg, int bdy_length, char* buffer) {
-    msg->bdy.length = bdy_length;
-    msg->bdy.buffer = buffer;
+    char* a = data;
 }

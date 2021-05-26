@@ -6,6 +6,8 @@
 #ifndef MESSAGE_H_
 #define MESSAGE_H_
 
+#include <stdio.h>
+#include <string.h>
 #include "actions.h"
 
 typedef struct {
@@ -13,40 +15,24 @@ typedef struct {
     int         flags;
 
     int         path_length;
-    char*       abs_path;
-} MessageHeader;
+    char*       path;
 
-
-typedef struct {
-    int     length;
-    char*   buffer;
-} MessageBody;
-
-
-typedef struct {
-    MessageHeader hdr;
-    MessageBody   bdy;
+    int         data_length;
+    char*       data;
 } Message;
 
 
 /**
  * @brief Imposta l'header del messaggio.
  * 
- * @param msg   Il messaggio di cui settare l'header
- * @param ac    Il tipo di azione riferita a quel messaggio
- * @param path  Percorso che identifica un file univocamente
- * @param flags Flags impostate da determinati messaggi
-**/
-static void setMessageHeader(Message* msg, ActionType ac, char* path, int flags);
-
-
-/**
- * @brief Imposta il body del messaggio.
+ * @param msg           Il messaggio di cui settare l'header
+ * @param ac            Il tipo di azione riferita a quel messaggio
+ * @param flags         Flags impostate da determinati messaggi
  * 
- * @param msg        Il messaggio di cui settare il body
- * @param bdy_length La dimensione del buffer
- * @param buffer     Buffer che contiene i dati
+ * @param path          Percorso che identifica un file univocamente
+ * @param data          Dati
+ * @param data_length   Lunghezza dati
 **/
-static void setMessageBody(Message* msg, int bdy_length, char* buffer);
+static void setMessage(Message* msg, ActionType ac, int flags, char* path, void* data, size_t data_length);
 
 #endif /* MESSAGE_H_ */

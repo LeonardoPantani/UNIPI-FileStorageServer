@@ -11,6 +11,7 @@ typedef struct hash_elem_t {
 	struct hash_elem_t* next; // Next element in case of a collision
 	
     void* data;	// Pointer to the stored element
+	size_t data_length; // dimensione dati
     
     int lock; // identifica univocamente un client se ha bloccato il file | -1 altrimenti
     ClientQueue* codaRichiedentiLock;
@@ -77,7 +78,7 @@ hashtable_t* ht_create(unsigned int capacity)
 /* 	Store data in the hashtable. If data with the same key are already stored,
 	they are overwritten, and return by the function. Else it returns NULL.
 	Returns HT_ERROR if there are memory alloc error */
-void* ht_put(hashtable_t* hasht, char* key, void* data, int lock, unsigned long updatedDate, int clientID)
+void* ht_put(hashtable_t* hasht, char* key, void* data, size_t data_length, int lock, unsigned long updatedDate, int clientID)
 {
 	if(data == NULL)
 		return NULL;
@@ -89,6 +90,7 @@ void* ht_put(hashtable_t* hasht, char* key, void* data, int lock, unsigned long 
 		if(!strcmp(e->key, key))
 		{
 			void* ret = e->data;
+			e->data_length = data_length;
 			e->path = key;
 			e->data = data;
             e->lock = lock;
@@ -106,6 +108,7 @@ void* ht_put(hashtable_t* hasht, char* key, void* data, int lock, unsigned long 
 	strcpy(e->key, key);
 	e->path = key;
 	e->data = data;
+	e->data_length = data_length;
 	e->lock = lock;
 	e->openBy = clientID;
 	e->updatedDate = updatedDate;
@@ -127,6 +130,20 @@ void* ht_get(hashtable_t* hasht, char* key)
 	{
 		if(!strcmp(e->key, key))
 			return e->data;
+		e = e->next;
+	}
+	return NULL;
+}
+
+/* Retrieve data length from the hashtable */
+void* ht_getDataLength(hashtable_t* hasht, char* key)
+{
+	unsigned int h = ht_calc_hash(key) % hasht->capacity;
+	hash_elem_t* e = hasht->table[h];
+	while(e != NULL)
+	{
+		if(!strcmp(e->key, key))
+			return &e->data_length;
 		e = e->next;
 	}
 	return NULL;
@@ -343,6 +360,7 @@ hash_elem_t* ht_iterate(hash_elem_it* iterator)
 	hash_elem_t* e = iterator->elem;
 	if(e)
 		iterator->elem = e->next;
+
 	return e;
 }
 
@@ -390,6 +408,8 @@ hash_elem_t* ht_find_old_entry(hashtable_t* hasht)
 	hash_elem_t* k = ht_iterate(&it);
 
 	hash_elem_t* vecchio = NULL;
+	
+
 	while(k != NULL)
 	{
 		if(vecchio == NULL) {
@@ -403,48 +423,27 @@ hash_elem_t* ht_find_old_entry(hashtable_t* hasht)
 		k = ht_iterate(&it);
 	}
 
+	free(k);
+
 	return vecchio;
-
-
-	/*
-	int i = hasht->capacity;
-	hash_elem_t* v = malloc(sizeof(hash_elem_t));
-	while(--i >= 0)
-	{
-		hash_elem_t* e = hasht->table[i];
-		if(e != NULL) {
-			if(v->updatedDate == 0) {
-				*v = *e;
-			}
-
-			if(e->updatedDate < v->updatedDate) { // se è più vecchio
-				*v = *e;
-			}
-			e = e->next;
-		}
-	}
-	*/
-
-	return k;
 }
 
-
-#ifdef TEST_HASHTABLE
+#ifdef TEST_HT
 #include <stdio.h>
 /* Main function for testing purpose only */
 int main()
 {
-	hashtable_t *ht = ht_create(1024);
-	ht_put(ht, "foo", "bar");
+	hashtable_t *ht = ht_create(1);
+	ht_put(ht, "foo", "bar", 1, 1, 1);
 	printf("%s\n", (char*)ht_get(ht, "foo"));
-	ht_put(ht, "foo", "rab");
+	ht_put(ht, "foo", "rab", 1, 1, 1);
 	printf("%s\n", (char*)ht_get(ht, "foo"));
 	ht_remove(ht, "foo");
 	if(!ht_get(ht, "foo"))
 		printf("foo removed\n");
 
-	ht_put(ht, "foo", "bar");
-	ht_put(ht, "toto", "titi");
+	ht_put(ht, "foo", "bar", 1, 1, 1);
+	ht_put(ht, "toto", "titi", 1, 1, 1);
 
 	printf("Listing keys\n");
 	char* str[ht->e_num];
@@ -465,6 +464,19 @@ int main()
 		printf("%s = %s \n", e->key, (char*)e->data);
 		e = ht_iterate(&it);
 	}
+
+	for(int i = 0; i < 3; i++) {
+		printf("%d::\n", i);
+		hash_elem_it it3 = HT_ITERATOR(ht);
+		e = ht_iterate(&it3);
+		while(e != NULL)
+		{
+			printf("%s = %s \n", e->key, (char*)e->data);
+			e = ht_iterate(&it3);
+		}
+	}
+	
+
 	
 	printf("Iterating keys\n");
 	hash_elem_it it2 = HT_ITERATOR(ht);

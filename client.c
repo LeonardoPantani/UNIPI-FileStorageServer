@@ -27,7 +27,7 @@ pthread_mutex_t mutexChiusura = PTHREAD_MUTEX_INITIALIZER;
 int chiusuraForte = FALSE;
 
 void help() {
-    ppf(CLR_SUCCESS); printf("Utilizzo:\n"); ppff();
+    ppf(CLR_HIGHLIGHT); printf("Utilizzo:\n"); ppff();
     pp("    -h                 \033[0m->\033[94m stampa questa lista", CLR_INFO);
     pp("    -f <filename>      \033[0m->\033[94m specifica il nome del socket a cui connettersi", CLR_INFO);
     pp("    -w <dirname[,n=0]> \033[0m->\033[94m invia i file nella cartella dirname; se n=0 manda tutti i file, altrimenti manda n file", CLR_INFO);
@@ -335,46 +335,34 @@ int main(int argc, char* argv[]) {
         }
 
         // === INIZIO COMUNICAZIONE CON SERVER ===
-        // creo variabili per contenere risposte
-        MessageHeader* header = malloc(sizeof(MessageHeader));
-        checkStop(header == NULL, "malloc header");
-
-        MessageBody* body = malloc(sizeof(MessageBody));
-        checkStop(body == NULL, "malloc body");
-
-        Message* risposta = malloc(sizeof(Message));
-        checkStop(risposta == NULL, "malloc risposta");
-        setMessageHeader(risposta, AC_UNKNOWN, NULL, 0);
-        setMessageBody(risposta, 0, NULL);
+        // creo variabile per contenere richieste
+        Message* msg = malloc(sizeof(Message));
+        checkStop(msg == NULL, "malloc msg");
+        // fine variabile per contenere richieste
+        setMessage(msg, AC_UNKNOWN, 0, NULL, NULL, 0);
 
 
         // attendo il messaggio di benvenuto dal server
-        int esito = readMessageHeader(socketConnection, header);
+        int esito = readMessage(socketConnection, msg);
         if(esito == 0) {
-            if(header->action == AC_WELCOME) {
-                checkStop(readMessageBody(socketConnection, body) != 0, "welcome senza body");
+            if(msg->action == AC_WELCOME) {
+                ppf(CLR_SUCCESS); printf("CLIENT> Ricevuto WELCOME dal server: %s\n", msg->data); ppff();
 
-                char* testo_risposta = "Grazie, ci sono";
+                char* testo_msg = "Grazie, ci sono";
+                setMessage(msg, AC_HELLO, 0, NULL, testo_msg, strlen(testo_msg));
 
-                setMessageHeader(risposta, AC_HELLO, NULL, 0);
-                setMessageBody(risposta, strlen(testo_risposta), testo_risposta);
+                ppf(CLR_INFO); printf("CLIENT> Rispondo al WELCOME con: %s\n", testo_msg);
 
-                ppf(CLR_SUCCESS); printf("CLIENT> Ricevuto WELCOME dal server: %s\n", body->buffer); ppff();
+                checkStop(sendMessage(socketConnection, msg) != 0, "msg hello al server iniziale");
 
-                ppf(CLR_INFO); printf("CLIENT> Rispondo al WELCOME con: %s\n", testo_risposta);
-
-                checkStop(sendMessage(socketConnection, risposta) != 0, "risposta hello al server iniziale");
-
-                pp("CLIENT> Inviata risposta al server con successo!", CLR_SUCCESS);
-            } else if(header->action == AC_MAXCONNECTIONSREACHED) {
-                readMessageBody(socketConnection, body);
-
+                pp("CLIENT> Inviato HELLO al server con successo!", CLR_SUCCESS);
+            } else if(msg->action == AC_MAXCONNECTIONSREACHED) {
                 ppf(CLR_ERROR); printf("CLIENT> Il server ha raggiunto il limite massimo di connessioni.\n"); ppff();
             }
         }
 
-        // se l'ultima richiesta è stata una WELCOME (cioè il server ha accettato la connessione)
-        if(header->action == AC_WELCOME) {
+        // se l'ultima richiesta è stata una HELLO (inviata da me), allora posso iniziare ad eseguire le richieste
+        if(msg->action == AC_HELLO) {
             // eseguo tutte le azioni richieste
             for(int i = 0; i < actions; i++) {
                 if(executeAction(listaAzioni[i], listaParametri[i]) == 0) {
