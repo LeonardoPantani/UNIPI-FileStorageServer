@@ -61,7 +61,6 @@ int readFile(const char* pathname, void** buf, size_t* size);
  * 
  * @returns 0 in caso di successo (letti N file), -1 in caso di fallimento (setta errno)
 **/
-
 int readNFiles(int N, const char* dirname);
 
 

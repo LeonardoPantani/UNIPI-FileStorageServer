@@ -79,7 +79,7 @@ static int sendFilesList(char* nomeCartella, int numFiles, int completed, int to
 
 static int executeAction(ActionType ac, char* parameters) {
     switch(ac) {
-        case AC_WRITE_RECU: {
+        case AC_WRITE_RECU: { // -w
             char* savePointer;
             char* nomeCartella, *temp;
             DIR* cartella;
@@ -117,7 +117,43 @@ static int executeAction(ActionType ac, char* parameters) {
             return sendFilesList(nomeCartella, numFiles, 0, 0); // restituisce la differenza tra file totali e file inviati con successo (se 0 ok, !=0 non tutti inviati)
         }
 
-        case AC_READ_LIST: {
+        case AC_WRITE_LIST: { // -W
+            char* savePointer;
+            char* nomeFile;
+
+            int completed = 0;
+            int total = 0;
+
+            nomeFile = strtok_r(parameters, ",", &savePointer);
+            while(nomeFile != NULL) {
+                total++;
+
+                struct stat proprieta;
+                int esito = stat(nomeFile, &proprieta);
+
+                if(esito == 0) {
+                    if(S_ISDIR(proprieta.st_mode) == 0) {
+                        if(openFile(nomeFile, O_CREATE|O_LOCK) == 0) {
+                            completed++;
+                        }
+                    } else {
+                        ppf(CLR_ERROR); printf("CLIENT> '%s' è una cartella.\n", nomeFile); ppff();
+                    }
+                } else {
+                    ppf(CLR_ERROR); printf("CLIENT> Il file '%s' non esiste o è corrotto.\n", nomeFile); ppff();
+                }
+
+                nomeFile = strtok_r(NULL, ",", &savePointer);
+            }
+
+            if(total - completed != 0) { // almeno un file non è stato inviato
+                return -1;
+            }
+
+            break;
+        }
+
+        case AC_READ_LIST: { // -r
             char* savePointer;
             char* nomeFile;
 
@@ -136,8 +172,6 @@ static int executeAction(ActionType ac, char* parameters) {
             
             nomeFile = strtok_r(parameters, ",", &savePointer);
             while(nomeFile != NULL) {
-                //checkM1(stat(nomeFile, &checkfile) != 0, "file inesistente read list");
-                // il file c'è, eseguo API
                 if(readFile(nomeFile, &puntatoreFile, &dimensioneFile) == 0) {
                     if(saveFiles) { // effettuo operazioni sottostanti solo se i file vanno salvati
                         FILE* filePointer;
@@ -168,6 +202,35 @@ static int executeAction(ActionType ac, char* parameters) {
             }
         }
 
+        case AC_READ_RECU: {
+            if(readNFiles(atoi(parameters), savedFileFolder) != 0) { // il lettura dei file è fallita
+                return -1;
+            }
+        }
+
+        case AC_DELETE: { // temp: non cancella, chiude e basta (test)
+            char* savePointer;
+            char* nomeFile;
+
+            int completed = 0;
+            int total = 0;
+
+            nomeFile = strtok_r(parameters, ",", &savePointer);
+            while(nomeFile != NULL) {
+                total++;
+                if(closeFile(nomeFile) == 0) {
+                    completed++;
+                }
+                
+                nomeFile = strtok_r(NULL, ",", &savePointer);
+            }
+
+            if(total - completed != 0) {  // almeno un file non è stato chiuso
+                return -1;
+            }
+
+            break;
+        }
         default: {
             break;
         }

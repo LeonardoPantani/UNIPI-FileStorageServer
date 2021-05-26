@@ -8,6 +8,8 @@
 static void setMessage(Message* msg, ActionType ac, int flags, char* path, void* data, size_t data_length) {
     msg->action = ac;
 
+    msg->flags = flags;
+
     if(path != NULL) {
         msg->path_length = strlen(path);
     } else {

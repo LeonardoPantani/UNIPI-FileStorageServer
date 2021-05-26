@@ -134,14 +134,62 @@ static Message* elaboraAzione(int socketConnection, Message* msg) {
         }
 
         case AC_READ: {
-            printf("Ricerca del file con percorso '%s' in corso...\n", msg->path);
+            ppf(CLR_INFO); printf("GC|EA> Ricerca del file '%s' in corso...\n", msg->path); ppff();
             void* dati = ht_get(ht, msg->path);
-            printf("DATI CONTENUTI: %s\n", (char*)dati);
-            if(dati != NULL) { // mando il file
-                setMessage(risposta, AC_FILESVD, 0, msg->path, dati, msg->data_length);
+            int lockato = ht_getLock(ht, msg->path);
+            int apertoDa = ht_getOpenBy(ht, msg->path);
+            size_t lung = ht_getDataLength(ht, msg->path);
+            if(dati != NULL) { // il file esiste
+                if(lockato == -1 || lockato == socketConnection) {
+                    ppf(CLR_INFO); printf("GC|EA> File '%s' trovato, invio...\n", msg->path); ppff();
+                    setMessage(risposta, AC_FILESVD, 0, msg->path, dati, lung);
+                } else {
+                    ppf(CLR_WARNING); printf("GC|EA> File '%s' trovato, ma il client %d non ne possiede i diritti di lettura/scrittura.\n", msg->path, socketConnection); ppff();
+                    setMessage(risposta, AC_NOTFORU, 0, NULL, NULL, 0);
+                }
             } else {
+                ppf(CLR_ERROR); printf("GC|EA> File '%s' non trovato, invio messaggio di errore.\n", msg->path); ppff();
                 setMessage(risposta, AC_FILENOTEXISTS, 0, NULL, NULL, 0);
             }
+            break;
+        }
+
+        case AC_READ_MULTIPLE: {
+            int i = 0;
+
+            if(ht->e_num == 0) {
+                setMessage(risposta, AC_FILENOTEXISTS, 0, NULL, NULL, 0);
+            } else {
+                setMessage(risposta, AC_START_SEND, 0, NULL, NULL, 0);
+                checkStop(sendMessage(socketConnection, risposta) == -1, "errore invio messaggio di inizio invio file multipli");
+
+                hash_elem_it it = HT_ITERATOR(ht);
+                hash_elem_t* e = ht_iterate(&it);
+                // mando un insieme di file, solo quelli per i quali il client ha i permessi di accesso
+                while(e != NULL && (i < *msg->data || *msg->data == -1) && (e->lock == -1 || e->lock == socketConnection)) {
+                    setMessage(risposta, AC_FILE_SENT, 0, e->path, e->data, e->data_length);
+                    checkStop(sendMessage(socketConnection, risposta) == -1, "errore invio messaggio con file inviato (multiplo)");
+
+                    e = ht_iterate(&it);
+                    i++;
+                }
+
+                setMessage(risposta, AC_FINISH_SEND, 0, NULL, NULL, 0);
+            }
+
+            break;
+        }
+
+        case AC_CLOSE: {
+            hash_elem_t* valore = ht_getElement(ht, msg->path);
+
+            if(valore->lock == -1 || valore->lock == socketConnection) { // temp
+                checkStop(ht_put(ht, msg->path, valore->data, valore->data_length, -1, valore->updatedDate, -1) == HT_ERROR, "impossibile aggiornare file dalla hash table (close)");
+                setMessage(risposta, AC_CLOSED, 0, NULL, NULL, 0);
+            } else {
+                setMessage(risposta, AC_NOTFORU, 0, NULL, NULL, 0);
+            }
+
             break;
         }
 

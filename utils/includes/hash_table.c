@@ -136,31 +136,31 @@ void* ht_get(hashtable_t* hasht, char* key)
 }
 
 /* Retrieve data length from the hashtable */
-void* ht_getDataLength(hashtable_t* hasht, char* key)
+size_t ht_getDataLength(hashtable_t* hasht, char* key)
 {
 	unsigned int h = ht_calc_hash(key) % hasht->capacity;
 	hash_elem_t* e = hasht->table[h];
 	while(e != NULL)
 	{
 		if(!strcmp(e->key, key))
-			return &e->data_length;
+			return e->data_length;
 		e = e->next;
 	}
-	return NULL;
+	return -1;
 }
 
 /* Retrieve lock from the hashtable */
-void* ht_getLock(hashtable_t* hasht, char* key)
+int ht_getLock(hashtable_t* hasht, char* key)
 {
 	unsigned int h = ht_calc_hash(key) % hasht->capacity;
 	hash_elem_t* e = hasht->table[h];
 	while(e != NULL)
 	{
 		if(!strcmp(e->key, key))
-			return &e->lock;
+			return e->lock;
 		e = e->next;
 	}
-	return NULL;
+	return -2;
 }
 
 /* Retrieve updatedDate from the hashtable */
@@ -192,17 +192,17 @@ char* ht_getPath(hashtable_t* hasht, char* key)
 }
 
 /* Retrieve openBy from the hashtable */
-void* ht_getOpenBy(hashtable_t* hasht, char* key)
+int ht_getOpenBy(hashtable_t* hasht, char* key)
 {
 	unsigned int h = ht_calc_hash(key) % hasht->capacity;
 	hash_elem_t* e = hasht->table[h];
 	while(e != NULL)
 	{
 		if(!strcmp(e->key, key))
-			return &e->openBy;
+			return e->openBy;
 		e = e->next;
 	}
-	return NULL;
+	return -2;
 }
 
 /* 	Remove data from the hashtable. Return the data removed from the table
@@ -342,6 +342,20 @@ void ht_list_openby(hashtable_t* hasht, void** v, size_t len)
 			e = e->next;
 		}
 	}
+}
+
+/* Retrieve updatedDate from the hashtable */
+hash_elem_t* ht_getElement(hashtable_t* hasht, char* key)
+{
+	unsigned int h = ht_calc_hash(key) % hasht->capacity;
+	hash_elem_t* e = hasht->table[h];
+	while(e != NULL)
+	{
+		if(!strcmp(e->key, key))
+			return e;
+		e = e->next;
+	}
+	return NULL;
 }
 
 /* Iterate through table's elements. */

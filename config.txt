@@ -11,7 +11,7 @@ MAX_WORKERS=1
 MAX_MEMORY_SIZE=10000000
 
 # Quantità di file massima
-MAX_FILES=1
+MAX_FILES=5
 
 # Nome del socket file
 SOCKET_FILE_NAME=mipiacequestonome

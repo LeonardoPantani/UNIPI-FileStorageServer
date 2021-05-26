@@ -22,6 +22,13 @@ typedef enum {
    AC_FLUSH_END = 21,
    AC_READ = 22,
    AC_FILESVD = 23,
+   AC_READ_MULTIPLE = 24,
+   AC_START_SEND = 25,
+   AC_FILE_SENT = 26,
+   AC_FINISH_SEND = 27,
+   AC_NOTFORU = 28,
+   AC_CLOSE = 29,
+   AC_CLOSED = 30,
 
     /**
      * CLIENT
