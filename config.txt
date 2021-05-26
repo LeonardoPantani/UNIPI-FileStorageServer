@@ -8,10 +8,10 @@ MAX_CONNECTIONS=1
 MAX_WORKERS=1
 
 # Quantità di memoria allocata massima
-MAX_MEMORY_SIZE=100
+MAX_MEMORY_SIZE=1000
 
 # Quantità di file massima
-MAX_FILES=3
+MAX_FILES=1
 
 # Nome del socket file
 SOCKET_FILE_NAME=mipiacequestonome

@@ -15,7 +15,7 @@ typedef struct SocketAssociation {
 SocketAssociation sockAssocArr[10];
 int sockAssocArrIter = 0;
 
-char socketPath[4096]; // nome del socket
+char *socketPath; // nome del socket
 
 /**
  * @brief Salva un'associazione del socket al descrittore file.

@@ -26,7 +26,8 @@
 			"type_traits": "c",
 			"utility": "c",
 			"socket.h": "c",
-			"statistics.h": "c"
+			"statistics.h": "c",
+			"cstdio": "c"
 		}
 	}
 }

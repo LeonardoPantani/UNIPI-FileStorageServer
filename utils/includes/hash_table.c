@@ -15,8 +15,11 @@ typedef struct hash_elem_t {
     int lock; // identifica univocamente un client se ha bloccato il file | -1 altrimenti
     ClientQueue* codaRichiedentiLock;
     pthread_cond_t rilascioLock;
+
+	int openBy; // identifica univocamente il client che ha aperto il file | -1 altrimenti
     
     unsigned long updatedDate; // data in tempo unix dell'ultima modifica (o creazione)
+	char* path;
     char key[]; 	// Key of the stored element
 } hash_elem_t;
 
@@ -74,7 +77,7 @@ hashtable_t* ht_create(unsigned int capacity)
 /* 	Store data in the hashtable. If data with the same key are already stored,
 	they are overwritten, and return by the function. Else it returns NULL.
 	Returns HT_ERROR if there are memory alloc error */
-void* ht_put(hashtable_t* hasht, char* key, void* data, int lock, unsigned long updatedDate)
+void* ht_put(hashtable_t* hasht, char* key, void* data, int lock, unsigned long updatedDate, int clientID)
 {
 	if(data == NULL)
 		return NULL;
@@ -86,8 +89,10 @@ void* ht_put(hashtable_t* hasht, char* key, void* data, int lock, unsigned long 
 		if(!strcmp(e->key, key))
 		{
 			void* ret = e->data;
+			e->path = key;
 			e->data = data;
             e->lock = lock;
+			e->openBy = clientID;
             e->updatedDate = updatedDate;
 			return ret;
 		}
@@ -99,7 +104,11 @@ void* ht_put(hashtable_t* hasht, char* key, void* data, int lock, unsigned long 
 	if((e = malloc(sizeof(hash_elem_t)+strlen(key)+1)) == NULL)
 		return HT_ERROR;
 	strcpy(e->key, key);
+	e->path = key;
 	e->data = data;
+	e->lock = lock;
+	e->openBy = clientID;
+	e->updatedDate = updatedDate;
 
 	// Add the element at the beginning of the linked list
 	e->next = hasht->table[h];
@@ -146,6 +155,34 @@ void* ht_getUpdatedDate(hashtable_t* hasht, char* key)
 	{
 		if(!strcmp(e->key, key))
 			return &e->updatedDate;
+		e = e->next;
+	}
+	return NULL;
+}
+
+/* Retrieve path from the hashtable */
+char* ht_getPath(hashtable_t* hasht, char* key)
+{
+	unsigned int h = ht_calc_hash(key) % hasht->capacity;
+	hash_elem_t* e = hasht->table[h];
+	while(e != NULL)
+	{
+		if(!strcmp(e->key, key))
+			return e->path;
+		e = e->next;
+	}
+	return NULL;
+}
+
+/* Retrieve openBy from the hashtable */
+void* ht_getOpenBy(hashtable_t* hasht, char* key)
+{
+	unsigned int h = ht_calc_hash(key) % hasht->capacity;
+	hash_elem_t* e = hasht->table[h];
+	while(e != NULL)
+	{
+		if(!strcmp(e->key, key))
+			return &e->openBy;
 		e = e->next;
 	}
 	return NULL;
@@ -253,6 +290,43 @@ void ht_list_updatedDate(hashtable_t* hasht, void** v, size_t len)
 	}
 }
 
+/* List paths. k should have length equals or greater than the number of keys */
+void ht_list_paths(hashtable_t* hasht, char** k, size_t len)
+{
+	if(len < hasht->e_num)
+		return;
+	int ki = 0; //Index to the current string in **k
+	int i = hasht->capacity;
+	while(--i >= 0)
+	{
+		hash_elem_t* e = hasht->table[i];
+		while(e)
+		{
+			k[ki++] = e->path;
+			e = e->next;
+		}
+	}
+}
+
+/* 	List locks. v should have length equals or greater 
+	than the number of stored elements */
+void ht_list_openby(hashtable_t* hasht, void** v, size_t len)
+{
+	if(len < hasht->e_num)
+		return;
+	int vi = 0; //Index to the current string in **v
+	int i = hasht->capacity;
+	while(--i >= 0)
+	{
+		hash_elem_t* e = hasht->table[i];
+		while(e)
+		{
+			v[vi++] = &e->openBy;
+			e = e->next;
+		}
+	}
+}
+
 /* Iterate through table's elements. */
 hash_elem_t* ht_iterate(hash_elem_it* iterator)
 {
@@ -306,6 +380,52 @@ void ht_destroy(hashtable_t* hasht)
 	ht_clear(hasht, 0); // Delete and free all.
 	free(hasht->table);
 	free(hasht);
+}
+
+/* Cerca una entry vecchia (per l'algoritmo di rimpiazzamento)
+	e la restituisce */
+hash_elem_t* ht_find_old_entry(hashtable_t* hasht)
+{
+	hash_elem_it it = HT_ITERATOR(hasht);
+	hash_elem_t* k = ht_iterate(&it);
+
+	hash_elem_t* vecchio = NULL;
+	while(k != NULL)
+	{
+		if(vecchio == NULL) {
+			vecchio = malloc(sizeof(hash_elem_t));
+			*vecchio = *k;
+		} else {
+			if(k->updatedDate < vecchio->updatedDate) {
+				*vecchio = *k;
+			}
+		}
+		k = ht_iterate(&it);
+	}
+
+	return vecchio;
+
+
+	/*
+	int i = hasht->capacity;
+	hash_elem_t* v = malloc(sizeof(hash_elem_t));
+	while(--i >= 0)
+	{
+		hash_elem_t* e = hasht->table[i];
+		if(e != NULL) {
+			if(v->updatedDate == 0) {
+				*v = *e;
+			}
+
+			if(e->updatedDate < v->updatedDate) { // se è più vecchio
+				*v = *e;
+			}
+			e = e->next;
+		}
+	}
+	*/
+
+	return k;
 }
 
 

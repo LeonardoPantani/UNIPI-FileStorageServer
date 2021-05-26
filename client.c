@@ -26,13 +26,6 @@ char savedFileFolder[PATH_MAX]; // -d percorso dove salvare i file letti dal ser
 pthread_mutex_t mutexChiusura = PTHREAD_MUTEX_INITIALIZER;
 int chiusuraForte = FALSE;
 
-/*
-typedef struct {
-    ActionType  action;
-    char*       abs_path;
-    int         size;
-} Operation; */
-
 void help() {
     ppf(CLR_SUCCESS); printf("Utilizzo:\n"); ppff();
     pp("    -h                 \033[0m->\033[94m stampa questa lista", CLR_INFO);
@@ -50,21 +43,8 @@ void help() {
     pp("    -p                 \033[0m->\033[94m abilita le stampe sull'stdout di ogni operazione", CLR_INFO);
 }
 
-static int sendFilesList(char* nomeCartella, int numFiles) {
+static int sendFilesList(char* nomeCartella, int numFiles, int completed, int total) {
     if(numFiles > 0 || numFiles == -1) {
-        // creo variabili per contenere richieste
-        MessageHeader* header = malloc(sizeof(MessageHeader));
-        checkStop(header == NULL, "malloc header");
-
-        MessageBody* body = malloc(sizeof(MessageBody));
-        checkStop(body == NULL, "malloc body");
-
-        Message* messaggio = malloc(sizeof(Message));
-        checkStop(messaggio == NULL, "malloc risposta");
-        setMessageHeader(messaggio, AC_UNKNOWN, NULL, 0);
-        setMessageBody(messaggio, 0, NULL);
-        // fine variabili per contenere richieste
-
         DIR* cartella;
         struct dirent *entry;
 
@@ -76,26 +56,30 @@ static int sendFilesList(char* nomeCartella, int numFiles) {
                 if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
                     continue;
                 snprintf(path, sizeof(path), "%s/%s", nomeCartella, entry->d_name);
-                sendFilesList(path, numFiles);
+                sendFilesList(path, numFiles, completed, total);
             } else { // è un file
                 snprintf(path, sizeof(path), "%s/%s", nomeCartella, entry->d_name);
                 struct stat proprieta;
                 int esito = stat(path, &proprieta);
                 
+                if(openFile(path, O_CREATE|O_LOCK) == 0) { // chiamata alla funzione che apre il file e lo manda
+                    completed++;
+                }
+                total++;
                 
                 if(numFiles != -1) numFiles--;
             }
         }
         closedir(cartella);
     }
+
+    return total-completed;
 }
 
 
 static int executeAction(ActionType ac, char* parameters) {
     switch(ac) {
         case AC_WRITE_RECU: {
-            return openFile(parameters, O_CREATE|O_LOCK);
-            /*
             char* savePointer;
             char* nomeCartella, *temp;
             DIR* cartella;
@@ -105,7 +89,7 @@ static int executeAction(ActionType ac, char* parameters) {
             nomeCartella = strtok_r(parameters, ",", &savePointer);
             if((cartella = opendir(nomeCartella)) == NULL) {
                 ppf(CLR_ERROR); printf("CLIENT> Cartella specificata '%s' inesistente.\n", nomeCartella); ppff();
-                break;
+                return -1;
             } else {
                 ppf(CLR_HIGHLIGHT); printf("CLIENT> Cartella per la write impostata su '%s'", nomeCartella);
             }
@@ -115,20 +99,73 @@ static int executeAction(ActionType ac, char* parameters) {
                 strtok_r(temp, "=", &savePointer);
                 if((temp = strtok_r(NULL, ",", &savePointer)) != NULL) {
                     numFiles = atoi(temp);
-                    if(numFiles == 0) numFiles = -1;
+                    
+                    if(numFiles == 0) {
+                        numFiles = -1;
+                        printf(" | numero file: TUTTI\n"); ppff();
+                    } else {
+                        printf(" | numero file: %d\n", numFiles); ppff();
+                    }
                 } else {
                     pp("CLIENT> Specificato sottoargomento 'n' ma non il suo valore.", CLR_ERROR);
-                    break;
+                    return -1;
                 }
             } else {
                 printf(" | numero file: TUTTI\n"); ppff();
             }
 
-            // cartella: cartella | numero file: numFiles
-            sendFilesList(socketConnection, nomeCartella, numFiles);
+            return sendFilesList(nomeCartella, numFiles, 0, 0); // restituisce la differenza tra file totali e file inviati con successo (se 0 ok, !=0 non tutti inviati)
+        }
 
-            break;
-            */
+        case AC_READ_LIST: {
+            char* savePointer;
+            char* nomeFile;
+
+            void* puntatoreFile;
+            size_t dimensioneFile;
+
+            struct stat checkfile;
+
+            int numFiles = -1;
+            int saveFiles = TRUE;
+
+            if(strcmp(savedFileFolder, "#") == 0) {
+                ppf(CLR_WARNING); printf("CLIENT> I file non saranno salvati perché non hai specificato nessuna cartella di destinazione con -d.\n"); ppff();
+                saveFiles = FALSE;
+            }
+            
+            nomeFile = strtok_r(parameters, ",", &savePointer);
+            while(nomeFile != NULL) {
+                //checkM1(stat(nomeFile, &checkfile) != 0, "file inesistente read list");
+                // il file c'è, eseguo API
+                if(readFile(nomeFile, &puntatoreFile, &dimensioneFile) == 0) {
+                    if(saveFiles) { // effettuo operazioni sottostanti solo se i file vanno salvati
+                        FILE* filePointer;
+                        char percorso[PATH_MAX];
+
+                        memset(percorso, 0, strlen(percorso));
+
+                        strcpy(percorso, savedFileFolder);
+                                        
+                        if(percorso[strlen(percorso) - 1] != '/') {
+                            strcat(percorso, "/");
+                        }
+                        strcat(percorso, basename(nomeFile));
+
+                        filePointer = fopen(percorso, "wb");
+                        if(filePointer == NULL) { pe("File non aperto!!"); }
+
+                        fwrite(puntatoreFile, 1, dimensioneFile, filePointer);
+                        ppf(CLR_INFO); printf("CLIENT> File '%s' salvato in '%s'\n", nomeFile, percorso); ppff();
+                                        
+                        fclose(filePointer);
+                    }
+                } else {
+                    return -1; // appena un file non viene letto do operazione fallita
+                }
+                
+                nomeFile = strtok_r(NULL, ",", &savePointer);
+            }
         }
 
         default: {
@@ -146,6 +183,8 @@ int main(int argc, char* argv[]) {
         ActionType listaAzioni[50];
         char listaParametri[50][1024];
         int actions = 0;
+        strcpy(ejectedFileFolder, "#"); // imposta il valore iniziale su #
+        strcpy(savedFileFolder, "#"); // imposta il valore iniziale su #
 
 		while ((opt = getopt(argc,argv, ":hf:w:W:D:r:R:d:t:l:u:c:p")) != -1) {
 			switch(opt) {
@@ -154,6 +193,8 @@ int main(int argc, char* argv[]) {
                 break;
                 
                 case 'f': // imposta il socket a cui connettersi
+                    socketPath = malloc(PATH_MAX);
+                    memset(socketPath, 0, PATH_MAX);
                     strcpy(socketPath, optarg);
                     if(verbose) { ppf(CLR_HIGHLIGHT); printf("CLIENT> Socket impostato su %s millisecondi.\n", socketPath); ppff(); }
                 break;

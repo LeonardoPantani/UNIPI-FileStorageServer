@@ -54,6 +54,18 @@ int readFile(const char* pathname, void** buf, size_t* size);
 
 
 /**
+ * @brief Richiede al server di leggere N files qualunque e salvarli in una cartella.
+ * 
+ * @param N         Numero di file da richiedere al server (se ne ha meno li invia tutti), se <= 0 vengono letti tutti i file
+ * @param dirname   Cartella lato client in cui salvare i file
+ * 
+ * @returns 0 in caso di successo (letti N file), -1 in caso di fallimento (setta errno)
+**/
+
+int readNFiles(int N, const char* dirname);
+
+
+/**
  * @brief Scrive tutto il file nel server.
  * 
  * @param pathname  percorso relativo al file da inviare

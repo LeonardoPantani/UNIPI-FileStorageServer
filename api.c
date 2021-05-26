@@ -11,6 +11,7 @@
 #include <sys/un.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <libgen.h>
 
 #include "utils/includes/macro.h"
 #include "utils/includes/utils.h"
@@ -75,9 +76,11 @@ int closeConnection(const char* sockname) {
 
 
 int openFile(const char* pathname, int flags) { // O_CREATE = 1 | O_LOCK = 2 | O_CREATE && O_LOCK = 3
-    if(flags != 1 && flags != 2 && flags != 3) {
+    if(flags != 1 && flags != 2 && flags != 3) { // le flag passate non sono valide
+        errno = EINVAL;
         return -1;
     }
+    
     // creo variabili per contenere richieste
     MessageHeader* header = malloc(sizeof(MessageHeader));
     checkStop(header == NULL, "malloc header");
@@ -93,14 +96,20 @@ int openFile(const char* pathname, int flags) { // O_CREATE = 1 | O_LOCK = 2 | O
     setMessageBody(messaggio, 0, NULL);
 
     int socketConnection;
+    extern char ejectedFileFolder[PATH_MAX];
 
     if((socketConnection = searchAssocByName(socketPath)) != -1) {
         FILE* file = fopen(pathname, "rb");
-        checkM1(!file, "file non apribile");
+        if(!file) { // file non apribile
+            errno = ENOENT;
+            return -1;
+        }
 
         struct stat sb;
-        checkM1(stat(pathname, &sb) == -1, "lettura statistiche file");
-
+        if(stat(pathname, &sb) == -1) { // impossibile aprire statistiche file
+            errno = EBADFD;
+            return -1;
+        }
 
         char *buffer = malloc(sb.st_size);
         fread(buffer, sb.st_size, 1, file);
@@ -117,43 +126,93 @@ int openFile(const char* pathname, int flags) { // O_CREATE = 1 | O_LOCK = 2 | O
                         ppf(CLR_HIGHLIGHT); printf("CLIENT> File '%s' caricato!\n", pathname); ppff();
                         break;
                     }
+                    
+                    case AC_FLUSH_START: {
+                        esito = readMessageHeader(socketConnection, header);
+                        while(esito == 0 && header->action != AC_FLUSH_END) {
+                            esito2 = readMessageBody(socketConnection, body);
+                            if(esito2 == 0) {
+                                ppf(CLR_HIGHLIGHT); printf("CLIENT> Espulso file '%s' per fare spazio a %s\n", header->abs_path, pathname); ppff();
+                                if(strcmp(ejectedFileFolder, "#") == 0) {
+                                    ppf(CLR_WARNING); printf("CLIENT> Il file '%s' non verrà salvato perché non è stata specificata nessuna cartella con -D.\n", header->abs_path); ppff();
+                                } else {
+                                    FILE* filePointer;
+                                    char percorso[PATH_MAX];
+                                    memset(percorso, 0, strlen(percorso));
+
+                                    strcpy(percorso, ejectedFileFolder);
+                                    
+                                    if(percorso[strlen(percorso) - 1] != '/') {
+                                        strcat(percorso, "/");
+                                    }
+                                    strcat(percorso, basename(header->abs_path));
+
+                                    filePointer = fopen(percorso, "wb");
+                                    if(filePointer == NULL) { pe("File non aperto!!"); }
+
+                                    fwrite(body->buffer, 1, body->length, filePointer);
+                                    ppf(CLR_INFO); printf("CLIENT> File '%s' salvato in '%s'\n", header->abs_path, percorso); ppff();
+                                    
+                                    fclose(filePointer);
+                                }
+                            }
+                            esito = readMessageHeader(socketConnection, header);
+                        }
+                        esito2 = readMessageBody(socketConnection, body); // da ignorare malamente
+
+                        
+                        esito = readMessageHeader(socketConnection, header);
+                        if(esito == 0) {
+                            esito2 = readMessageBody(socketConnection, body);
+                            if(header->action == AC_FILERCVD) {
+                                ppf(CLR_HIGHLIGHT); printf("CLIENT> File '%s' caricato!\n", pathname); ppff();
+                            }
+                        }
+                            
+                        break;
+                    }
 
                     case AC_FILEEXISTS: {
                         ppf(CLR_ERROR); printf("CLIENT> Il file '%s' esiste già, non puoi fare una CREATE.\n", pathname); ppff();
-                        break;
+                        errno = EEXIST;
+                        return -1;
                     }
 
                     case AC_FILENOTEXISTS: {
                         ppf(CLR_ERROR); printf("CLIENT> Il file '%s' non esiste, devi fare prima una CREATE.\n", pathname); ppff();
-                        break;
+                        errno = ENOENT;
+                        return -1;
                     }
 
                     case AC_MAXFILESREACHED: {
                         ppf(CLR_ERROR); printf("CLIENT> Il file '%s' non può essere salvato perché il server ha raggiunto il numero massimo di file salvati.\n", pathname); ppff();
-                        break;
+                        errno = ENOSPC;
+                        return -1;
                     }
 
                     case AC_NOSPACELEFT: {
                         ppf(CLR_ERROR); printf("CLIENT> Il file '%s' non può essere salvato perché il server non avrebbe più spazio disponibile in memoria.\n", pathname); ppff();
-                        break;
+                        errno = ENOSPC;
+                        return -1;
                     }
 
                     default: {
-                        if(esito2 != 0) {
-                            ppf(CLR_ERROR); printf("CLIENT> Il server ha mandato una risposta non valida: %s", body->buffer); ppff();
-                            break;
-                        }
-                        break;
+                        ppf(CLR_ERROR); printf("CLIENT> Il server ha mandato una risposta non valida: %s", body->buffer); ppff();
+                        errno = EBADRQC;
+                        return -1;
                     }
                 }
             }  else { // errore risposta
-                stampaDebug("errore risposta");
+                stampaDebug("Errore body richiesta visione file!");
+                errno = EBADMSG;
                 return -1;
             }
-            free(header);
-        } else {
+        } else { // errore invio messaggio
             stampaDebug("Impossibile inviare la richiesta di visione file!");
+            errno = EBADE;
+            return -1;
         }
+
 
         return 0;
     } else { // non c'è un socket su cui comunicare
@@ -163,8 +222,78 @@ int openFile(const char* pathname, int flags) { // O_CREATE = 1 | O_LOCK = 2 | O
 }
 
 
+/**
+ * @brief Legge il contenuto del file dal server (se esiste).
+ * 
+ * @param pathname percorso relativo al file che si vuole leggere
+ * @param buf      puntatore sull'heap del file ottenuto
+ * @param size     dimensione del buffer dati ottenuto
+ * 
+ * @returns 0 in caso di successo, -1 in caso di fallimento (setta errno)
+**/
 int readFile(const char* pathname, void** buf, size_t* size) {
-    return -1;
+    // creo variabili per contenere richieste
+    MessageHeader* header = malloc(sizeof(MessageHeader));
+    checkStop(header == NULL, "malloc header");
+
+    MessageBody* body = malloc(sizeof(MessageBody));
+    checkStop(body == NULL, "malloc body");
+
+    Message* messaggio = malloc(sizeof(Message));
+    checkStop(messaggio == NULL, "malloc risposta");
+    // fine variabili per contenere richieste
+
+    setMessageHeader(messaggio, AC_READ, (char*)pathname, 0);
+    setMessageBody(messaggio, 0, NULL);
+
+    int socketConnection;
+
+    if((socketConnection = searchAssocByName(socketPath)) != -1) {
+        if(sendMessage(socketConnection, messaggio) == 0) {
+            // una volta inviata la richiesta di check del file
+            int esito = readMessageHeader(socketConnection, header);
+            if(esito == 0) {
+                int esito2 = readMessageBody(socketConnection, body);
+
+                switch(header->action) {
+                    case AC_FILESVD: {
+                        if(esito2 == 0) {
+                            *buf = body->buffer;
+                            *size = body->length;
+                            ppf(CLR_INFO); printf("CLIENT> File '%s' salvato in memoria all'indirizzo %p.\n", pathname, &body->buffer); ppff();
+                        }
+                        
+                        break;
+                    }
+
+                    case AC_FILENOTEXISTS: {
+                        ppf(CLR_ERROR); printf("CLIENT> Il file '%s' non esiste, non può essere letto\n", pathname); ppff();
+                        errno = ENOENT;
+                        return -1;
+                    }
+
+                    default: {
+                        ppf(CLR_ERROR); printf("CLIENT> Il server ha mandato una risposta non valida: %s", body->buffer); ppff();
+                        errno = EBADRQC;
+                        return -1;
+                    }
+                }
+            }  else { // errore risposta
+                stampaDebug("Errore lettura header richiesta lettura file.");
+                errno = EBADMSG;
+                return -1;
+            }
+        } else { // errore invio messaggio
+            stampaDebug("Impossibile inviare la richiesta di lettura file.");
+            errno = EBADE;
+            return -1;
+        }
+
+        return 0;
+    } else { // non c'è un socket su cui comunicare
+        errno = EPIPE;
+        return -1;
+    }
 }
 
 
