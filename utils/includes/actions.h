@@ -29,6 +29,14 @@ typedef enum {
    AC_NOTFORU = 28,
    AC_CLOSE = 29,
    AC_CLOSED = 30,
+   AC_DELETED = 31,
+   AC_WRITE = 32,
+   AC_FILENOTNEW = 33,
+   AC_APPEND = 34,
+   AC_LOCK = 35,
+   AC_UNLOCK = 36,
+   AC_LOCKED = 37,
+   AC_UNLOCKED = 38,
 
     /**
      * CLIENT

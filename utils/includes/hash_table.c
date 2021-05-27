@@ -13,11 +13,10 @@ typedef struct hash_elem_t {
     void* data;	// Pointer to the stored element
 	size_t data_length; // dimensione dati
     
-    int lock; // identifica univocamente un client se ha bloccato il file | -1 altrimenti
+    int lock; // identifica univocamente un client se ha bloccato il file (la relativa connessione) | -1 altrimenti
     ClientQueue* codaRichiedentiLock;
-    pthread_cond_t rilascioLock;
-
-	int openBy; // identifica univocamente il client che ha aperto il file | -1 altrimenti
+    pthread_cond_t* rilascioLock;
+	pthread_mutex_t* mutex;
     
     unsigned long updatedDate; // data in tempo unix dell'ultima modifica (o creazione)
 	char* path;
@@ -94,8 +93,8 @@ void* ht_put(hashtable_t* hasht, char* key, void* data, size_t data_length, int 
 			e->path = key;
 			e->data = data;
             e->lock = lock;
-			e->openBy = clientID;
             e->updatedDate = updatedDate;
+			pthread_mutex_init(e->mutex, NULL);
 			return ret;
 		}
 		e = e->next;
@@ -110,8 +109,8 @@ void* ht_put(hashtable_t* hasht, char* key, void* data, size_t data_length, int 
 	e->data = data;
 	e->data_length = data_length;
 	e->lock = lock;
-	e->openBy = clientID;
 	e->updatedDate = updatedDate;
+	pthread_mutex_init(e->mutex, NULL);
 
 	// Add the element at the beginning of the linked list
 	e->next = hasht->table[h];
@@ -189,20 +188,6 @@ char* ht_getPath(hashtable_t* hasht, char* key)
 		e = e->next;
 	}
 	return NULL;
-}
-
-/* Retrieve openBy from the hashtable */
-int ht_getOpenBy(hashtable_t* hasht, char* key)
-{
-	unsigned int h = ht_calc_hash(key) % hasht->capacity;
-	hash_elem_t* e = hasht->table[h];
-	while(e != NULL)
-	{
-		if(!strcmp(e->key, key))
-			return e->openBy;
-		e = e->next;
-	}
-	return -2;
 }
 
 /* 	Remove data from the hashtable. Return the data removed from the table
@@ -325,26 +310,7 @@ void ht_list_paths(hashtable_t* hasht, char** k, size_t len)
 	}
 }
 
-/* 	List locks. v should have length equals or greater 
-	than the number of stored elements */
-void ht_list_openby(hashtable_t* hasht, void** v, size_t len)
-{
-	if(len < hasht->e_num)
-		return;
-	int vi = 0; //Index to the current string in **v
-	int i = hasht->capacity;
-	while(--i >= 0)
-	{
-		hash_elem_t* e = hasht->table[i];
-		while(e)
-		{
-			v[vi++] = &e->openBy;
-			e = e->next;
-		}
-	}
-}
-
-/* Retrieve updatedDate from the hashtable */
+/* Retrieve entire element from the hashtable */
 hash_elem_t* ht_getElement(hashtable_t* hasht, char* key)
 {
 	unsigned int h = ht_calc_hash(key) % hasht->capacity;

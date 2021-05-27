@@ -202,13 +202,15 @@ static int executeAction(ActionType ac, char* parameters) {
             }
         }
 
-        case AC_READ_RECU: {
+        case AC_READ_RECU: { // -R
             if(readNFiles(atoi(parameters), savedFileFolder) != 0) { // il lettura dei file è fallita
                 return -1;
             }
+
+            break;
         }
 
-        case AC_DELETE: { // temp: non cancella, chiude e basta (test)
+        case AC_DELETE: { // -c
             char* savePointer;
             char* nomeFile;
 
@@ -218,19 +220,58 @@ static int executeAction(ActionType ac, char* parameters) {
             nomeFile = strtok_r(parameters, ",", &savePointer);
             while(nomeFile != NULL) {
                 total++;
-                if(closeFile(nomeFile) == 0) {
+                if(removeFile(nomeFile) == 0) {
                     completed++;
                 }
                 
                 nomeFile = strtok_r(NULL, ",", &savePointer);
             }
 
-            if(total - completed != 0) {  // almeno un file non è stato chiuso
+            if(total - completed != 0) {  // almeno un file non è stato eliminato
                 return -1;
             }
 
             break;
         }
+
+        case AC_ACQUIRE_MUTEX: { // -l
+            char* savePointer;
+            char* nomeFile;
+
+            int numFiles = -1;
+            int saveFiles = TRUE;
+
+            nomeFile = strtok_r(parameters, ",", &savePointer);
+            while(nomeFile != NULL) {
+                if(lockFile(nomeFile) != 0) {
+                    return -1; // appena un file non viene letto do operazione fallita
+                }
+                
+                nomeFile = strtok_r(NULL, ",", &savePointer);
+            }
+
+            break;
+        }
+
+        case AC_RELEASE_MUTEX: { // -u
+            char* savePointer;
+            char* nomeFile;
+
+            int numFiles = -1;
+            int saveFiles = TRUE;
+
+            nomeFile = strtok_r(parameters, ",", &savePointer);
+            while(nomeFile != NULL) {
+                if(unlockFile(nomeFile) != 0) {
+                    return -1; // appena un file non viene letto do operazione fallita
+                }
+                
+                nomeFile = strtok_r(NULL, ",", &savePointer);
+            }
+
+            break;
+        }
+        
         default: {
             break;
         }
