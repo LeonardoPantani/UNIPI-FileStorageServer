@@ -1,3 +1,4 @@
+#define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -10,6 +11,8 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <time.h>
+#include <getopt.h>
 
 #include "api.c"
 #include "utils/includes/message.c"
@@ -26,21 +29,21 @@ char savedFileFolder[PATH_MAX]; // -d percorso dove salvare i file letti dal ser
 pthread_mutex_t mutexChiusura = PTHREAD_MUTEX_INITIALIZER;
 int chiusuraForte = FALSE;
 
-void help() {
+void help(void) {
     ppf(CLR_HIGHLIGHT); printf("Utilizzo:\n"); ppff();
-    pp("    -h                 \033[0m->\033[94m stampa questa lista", CLR_INFO);
-    pp("    -f <filename>      \033[0m->\033[94m specifica il nome del socket a cui connettersi", CLR_INFO);
-    pp("    -w <dirname[,n=0]> \033[0m->\033[94m invia i file nella cartella dirname; se n=0 manda tutti i file, altrimenti manda n file", CLR_INFO);
-    pp("    -W <file1[,file2]> \033[0m->\033[94m lista di file da inviare al server", CLR_INFO);
-    pp("    -D <dirname>       \033[0m->\033[94m cartella dove mettere i file in caso vengano espulsi dal server", CLR_INFO);
-    pp("    -r <file1[,file2]> \033[0m->\033[94m lista di file richiesti al server", CLR_INFO);
-    pp("    -R [n=0]           \033[0m->\033[94m legge n file dal server, se n non specificato li legge tutti", CLR_INFO);
-    pp("    -d <dirname>       \033[0m->\033[94m cartella dove mettere i file letti dal server", CLR_INFO);
-    pp("    -t time            \033[0m->\033[94m tempo (ms) che intercorre tra una richiesta di connessione e l'altra al server", CLR_INFO);
-    pp("    -l <file1[,file2]> \033[0m->\033[94m lista di file da bloccare", CLR_INFO);
-    pp("    -u <file1[,file2]> \033[0m->\033[94m lista di file da sbloccare", CLR_INFO);
-    pp("    -c <file1[,file2]> \033[0m->\033[94m lista di file da rimuovere dal server", CLR_INFO);
-    pp("    -p                 \033[0m->\033[94m abilita le stampe sull'stdout di ogni operazione", CLR_INFO);
+    ppf(CLR_INFO); printf("    -h                 \033[0m->\033[94m stampa questa lista"); ppff();
+    ppf(CLR_INFO); printf("    -f <filename>      \033[0m->\033[94m specifica il nome del socket a cui connettersi"); ppff();
+    ppf(CLR_INFO); printf("    -w <dirname[,n=0]> \033[0m->\033[94m invia i file nella cartella dirname; se n=0 manda tutti i file, altrimenti manda n file"); ppff();
+    ppf(CLR_INFO); printf("    -W <file1[,file2]> \033[0m->\033[94m lista di file da inviare al server"); ppff();
+    ppf(CLR_INFO); printf("    -D <dirname>       \033[0m->\033[94m cartella dove mettere i file in caso vengano espulsi dal server"); ppff();
+    ppf(CLR_INFO); printf("    -r <file1[,file2]> \033[0m->\033[94m lista di file richiesti al server"); ppff();
+    ppf(CLR_INFO); printf("    -R [n=0]           \033[0m->\033[94m legge n file dal server, se n non specificato li legge tutti"); ppff();
+    ppf(CLR_INFO); printf("    -d <dirname>       \033[0m->\033[94m cartella dove mettere i file letti dal server"); ppff();
+    ppf(CLR_INFO); printf("    -t time            \033[0m->\033[94m tempo (ms) che intercorre tra una richiesta di connessione e l'altra al server"); ppff();
+    ppf(CLR_INFO); printf("    -l <file1[,file2]> \033[0m->\033[94m lista di file da bloccare"); ppff();
+    ppf(CLR_INFO); printf("    -u <file1[,file2]> \033[0m->\033[94m lista di file da sbloccare"); ppff();
+    ppf(CLR_INFO); printf("    -c <file1[,file2]> \033[0m->\033[94m lista di file da rimuovere dal server"); ppff();
+    ppf(CLR_INFO); printf("    -p                 \033[0m->\033[94m abilita le stampe sull'stdout di ogni operazione"); ppff();
 }
 
 static int sendFilesList(char* nomeCartella, int numFiles, int completed, int total) {
@@ -52,22 +55,42 @@ static int sendFilesList(char* nomeCartella, int numFiles, int completed, int to
 
         while((entry = readdir(cartella)) != NULL && (numFiles > 0 || numFiles == -1)) {
             char path[PATH_MAX];
-            if(entry->d_type == DT_DIR) {
-                if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
-                    continue;
-                snprintf(path, sizeof(path), "%s/%s", nomeCartella, entry->d_name);
-                sendFilesList(path, numFiles, completed, total);
-            } else { // è un file
-                snprintf(path, sizeof(path), "%s/%s", nomeCartella, entry->d_name);
-                struct stat proprieta;
-                int esito = stat(path, &proprieta);
-                
-                if(openFile(path, O_CREATE|O_LOCK) == 0) { // chiamata alla funzione che apre il file e lo manda
-                    completed++;
+            snprintf(path, sizeof(path), "%s/%s", nomeCartella, entry->d_name);
+            struct stat proprieta;
+
+            if(stat(path, &proprieta) == 0) {
+                if(S_ISDIR(proprieta.st_mode)) { // fix (?)
+                    if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+                        continue;
+                    sendFilesList(path, numFiles, completed, total);
+                } else { // è un file
+                    if(openFile(path, O_CREATE|O_LOCK) == 0) { // prima vede se il file va creato o c'è già
+                        if(writeFile(path, ejectedFileFolder) == 0) { // se il file non esiste allora lo blocco e ci scrivo sopra
+                            completed++;
+                        }
+                        unlockFile(path);
+                    } else if(openFile(path, O_LOCK) == 0) { // se il file esiste già allora faccio la lock e appendo
+                        FILE* filePointer;
+                        filePointer = fopen(path, "rb");
+                        if(filePointer == NULL) { pe("File non aperto!"); }
+
+                        void* data = malloc(sizeof(char)*proprieta.st_size);
+
+                        if(fread(data, 1, proprieta.st_size, filePointer) == proprieta.st_size) { // se la lettura da file avviene correttamente
+                            if(appendToFile(path, data, proprieta.st_size, ejectedFileFolder) == 0) { // allora faccio la append
+                                completed++;
+                            }
+                            unlockFile(path);
+                        }
+
+                        free(data);
+                    } else { // c'è un problema relativo al file o qualcos'altro
+                        // NULLA
+                    }
+                    total++;
+                    
+                    if(numFiles != -1) numFiles--;
                 }
-                total++;
-                
-                if(numFiles != -1) numFiles--;
             }
         }
         closedir(cartella);
@@ -89,9 +112,11 @@ static int executeAction(ActionType ac, char* parameters) {
             nomeCartella = strtok_r(parameters, ",", &savePointer);
             if((cartella = opendir(nomeCartella)) == NULL) {
                 ppf(CLR_ERROR); printf("CLIENT> Cartella specificata '%s' inesistente.\n", nomeCartella); ppff();
+                free(cartella);
                 return -1;
             } else {
                 ppf(CLR_HIGHLIGHT); printf("CLIENT> Cartella per la write impostata su '%s'", nomeCartella);
+                free(cartella);
             }
             temp = strtok_r(NULL, ",", &savePointer);
 
@@ -107,7 +132,7 @@ static int executeAction(ActionType ac, char* parameters) {
                         printf(" | numero file: %d\n", numFiles); ppff();
                     }
                 } else {
-                    pp("CLIENT> Specificato sottoargomento 'n' ma non il suo valore.", CLR_ERROR);
+                    ppf(CLR_ERROR); printf("CLIENT> Specificato sottoargomento 'n' ma non il suo valore.\n"); ppff();
                     return -1;
                 }
             } else {
@@ -133,8 +158,28 @@ static int executeAction(ActionType ac, char* parameters) {
 
                 if(esito == 0) {
                     if(S_ISDIR(proprieta.st_mode) == 0) {
-                        if(openFile(nomeFile, O_CREATE|O_LOCK) == 0) {
-                            completed++;
+                        if(openFile(nomeFile, O_CREATE|O_LOCK) == 0) { // prima vede se il file va creato o c'è già
+                            if(writeFile(nomeFile, ejectedFileFolder) == 0) { // se il file non esiste allora lo blocco e ci scrivo sopra
+                                completed++;
+                            }
+                            unlockFile(nomeFile);
+                        } else if(openFile(nomeFile, O_LOCK) == 0) { // se il file esiste già allora faccio la lock e appendo
+                            FILE* filePointer;
+                            filePointer = fopen(nomeFile, "rb");
+                            if(filePointer == NULL) { pe("File non aperto!!"); }
+
+                            void* data = malloc(sizeof(char)*proprieta.st_size);
+
+                            if(fread(data, 1, proprieta.st_size, filePointer) == proprieta.st_size) { // se la lettura da file avviene correttamente
+                                if(appendToFile(nomeFile, data, proprieta.st_size, ejectedFileFolder) == 0) { // allora faccio la append
+                                    completed++;
+                                }
+                                unlockFile(nomeFile);
+                            }
+
+                            free(data);
+                        } else { // c'è un problema relativo al file o qualcos'altro
+                            // NULLA
                         }
                     } else {
                         ppf(CLR_ERROR); printf("CLIENT> '%s' è una cartella.\n", nomeFile); ppff();
@@ -160,9 +205,6 @@ static int executeAction(ActionType ac, char* parameters) {
             void* puntatoreFile;
             size_t dimensioneFile;
 
-            struct stat checkfile;
-
-            int numFiles = -1;
             int saveFiles = TRUE;
 
             if(strcmp(savedFileFolder, "#") == 0) {
@@ -203,7 +245,11 @@ static int executeAction(ActionType ac, char* parameters) {
         }
 
         case AC_READ_RECU: { // -R
-            if(readNFiles(atoi(parameters), savedFileFolder) != 0) { // il lettura dei file è fallita
+            int num;
+
+            if(parameters != NULL) { num = atoi(parameters); } else { num = -1; }
+
+            if(readNFiles(num, savedFileFolder) != 0) { // il lettura dei file è fallita
                 return -1;
             }
 
@@ -238,9 +284,6 @@ static int executeAction(ActionType ac, char* parameters) {
             char* savePointer;
             char* nomeFile;
 
-            int numFiles = -1;
-            int saveFiles = TRUE;
-
             nomeFile = strtok_r(parameters, ",", &savePointer);
             while(nomeFile != NULL) {
                 if(lockFile(nomeFile) != 0) {
@@ -256,9 +299,6 @@ static int executeAction(ActionType ac, char* parameters) {
         case AC_RELEASE_MUTEX: { // -u
             char* savePointer;
             char* nomeFile;
-
-            int numFiles = -1;
-            int saveFiles = TRUE;
 
             nomeFile = strtok_r(parameters, ",", &savePointer);
             while(nomeFile != NULL) {
@@ -287,6 +327,7 @@ int main(int argc, char* argv[]) {
         ActionType listaAzioni[50];
         char listaParametri[50][1024];
         int actions = 0;
+        DIR* cartella;
         strcpy(ejectedFileFolder, "#"); // imposta il valore iniziale su #
         strcpy(savedFileFolder, "#"); // imposta il valore iniziale su #
 
@@ -307,7 +348,7 @@ int main(int argc, char* argv[]) {
                     listaAzioni[actions] = AC_WRITE_RECU;
                     strcpy(listaParametri[actions], optarg);
                     actions++;
-                    if(verbose) { pp("CLIENT> Operazione AC_WRITE (-w) in attesa.", CLR_INFO); }
+                    if(verbose) { ppf(CLR_INFO); printf("CLIENT> Operazione AC_WRITE_RECU (-w) in attesa.\n"); ppff(); }
                     break;
                 }
 
@@ -315,16 +356,17 @@ int main(int argc, char* argv[]) {
                     listaAzioni[actions] = AC_WRITE_LIST;
                     strcpy(listaParametri[actions], optarg);
                     actions++;
-                    if(verbose) { pp("CLIENT> Operazione AC_WRITE_LIST (-W) in attesa.", CLR_INFO); }
+                    if(verbose) { ppf(CLR_INFO); printf("CLIENT> Operazione AC_WRITE_LIST (-W) in attesa.\n"); ppff(); }
                     break;
                 }
 
                 case 'D': { // cartella dove salvare file espulsi dal server (INSIEME A w|W!)
-                    DIR* cartella;
                     if((cartella = opendir(optarg)) == NULL) {
                         ppf(CLR_ERROR); printf("CLIENT> Cartella specificata '%s' inesistente (-D).\n", optarg); ppff();
+                        free(cartella);
                         break;
                     }
+                    free(cartella);
                     strcpy(ejectedFileFolder, optarg);
                     if(verbose) { ppf(CLR_HIGHLIGHT); printf("CLIENT> Cartella impostata su '%s' (-D).\n", optarg); ppff(); }
                     break;
@@ -334,7 +376,7 @@ int main(int argc, char* argv[]) {
                     listaAzioni[actions] = AC_READ_LIST;
                     strcpy(listaParametri[actions], optarg);
                     actions++;
-                    if(verbose) { pp("CLIENT> Operazione AC_READ_LIST in attesa.", CLR_INFO); }
+                    if(verbose) { ppf(CLR_INFO); printf("CLIENT> Operazione AC_READ_LIST in attesa.\n"); ppff(); }
                     break;
                 }
 
@@ -342,16 +384,17 @@ int main(int argc, char* argv[]) {
                     listaAzioni[actions] = AC_READ_RECU;
                     strcpy(listaParametri[actions], optarg);
                     actions++;
-                    if(verbose) { pp("CLIENT> Operazione AC_READ_RECU in attesa.", CLR_INFO); }
+                    if(verbose) { ppf(CLR_INFO); printf("CLIENT> Operazione AC_READ_RECU in attesa.\n"); ppff(); }
                     break;
                 } 
 
                 case 'd': { // cartella dove salvare file letti con la r oppure R (INSIEME A r|R)
-                    DIR* cartella;
                     if((cartella = opendir(optarg)) == NULL) {
                         ppf(CLR_ERROR); printf("CLIENT> Cartella specificata '%s' inesistente (-d).\n", optarg); ppff();
+                        free(cartella);
                         break;
                     }
+                    free(cartella);
                     strcpy(savedFileFolder, optarg);
                     if(verbose) { ppf(CLR_HIGHLIGHT); printf("CLIENT> Cartella impostata su '%s' (-d).\n", optarg); ppff(); }
                     break;
@@ -367,7 +410,7 @@ int main(int argc, char* argv[]) {
                     listaAzioni[actions] = AC_ACQUIRE_MUTEX;
                     strcpy(listaParametri[actions], optarg);
                     actions++;
-                    if(verbose) { pp("CLIENT> Operazione AC_ACQUIRE_MUTEX in attesa.", CLR_INFO); }
+                    if(verbose) { ppf(CLR_INFO); printf("CLIENT> Operazione AC_ACQUIRE_MUTEX in attesa.\n"); ppff(); }
                     break;
                 }
 
@@ -375,7 +418,7 @@ int main(int argc, char* argv[]) {
                     listaAzioni[actions] = AC_RELEASE_MUTEX;
                     strcpy(listaParametri[actions], optarg);
                     actions++;
-                    if(verbose) { pp("CLIENT> Operazione AC_RELEASE_MUTEX in attesa.", CLR_INFO); }
+                    if(verbose) { ppf(CLR_INFO); printf("CLIENT> Operazione AC_RELEASE_MUTEX in attesa.\n"); ppff(); }
                     break;
                 }
 
@@ -383,7 +426,7 @@ int main(int argc, char* argv[]) {
                     listaAzioni[actions] = AC_DELETE;
                     strcpy(listaParametri[actions], optarg);
                     actions++;
-                    if(verbose) { pp("CLIENT> Operazione AC_DELETE in attesa.", CLR_INFO); }
+                    if(verbose) { ppf(CLR_INFO); printf("CLIENT> Operazione AC_DELETE in attesa.\n"); ppff(); }
                     break;
                 }
 
@@ -420,9 +463,10 @@ int main(int argc, char* argv[]) {
         tempoMassimo.tv_sec  = 10;
         
 
-        if((socketConnection = openConnection(socketPath, 5000, tempoMassimo)) == -1) {
+        if((socketConnection = openConnection(socketPath, 4999, tempoMassimo)) == -1) {
             // connessione fallita
             pe("Errore durante la connessione");
+            free(socketPath);
             return -1;
         }
 
@@ -435,12 +479,13 @@ int main(int argc, char* argv[]) {
         // ignoro SIGPIPE per evitare di essere terminato da una scrittura su un socket chiuso
         if ((sigaction(SIGPIPE, &s, NULL)) == -1) {
             pe("Errore sigaction");
+            free(socketPath);
             return -1;
         }
 
         // === INIZIO COMUNICAZIONE CON SERVER ===
         // creo variabile per contenere richieste
-        Message* msg = malloc(sizeof(Message));
+        Message* msg = calloc(4, sizeof(Message));
         checkStop(msg == NULL, "malloc msg");
         // fine variabile per contenere richieste
         setMessage(msg, AC_UNKNOWN, 0, NULL, NULL, 0);
@@ -459,9 +504,12 @@ int main(int argc, char* argv[]) {
 
                 checkStop(sendMessage(socketConnection, msg) != 0, "msg hello al server iniziale");
 
-                pp("CLIENT> Inviato HELLO al server con successo!", CLR_SUCCESS);
+                ppf(CLR_SUCCESS); printf("CLIENT> Inviato HELLO al server con successo!\n"); ppff();
             } else if(msg->action == AC_MAXCONNECTIONSREACHED) {
                 ppf(CLR_ERROR); printf("CLIENT> Il server ha raggiunto il limite massimo di connessioni.\n"); ppff();
+
+                free(msg->path);
+                free(msg->data);
             }
         }
 
@@ -471,25 +519,33 @@ int main(int argc, char* argv[]) {
             for(int i = 0; i < actions; i++) {
                 if(executeAction(listaAzioni[i], listaParametri[i]) == 0) {
                     ppf(CLR_SUCCESS); printf("CLIENT> Operazione n°%d completata con successo.\n", listaAzioni[i]); ppff();
+                    
+					struct timespec t;
+					t.tv_sec  = (int)timeoutRequests/1000;
+					t.tv_nsec = (timeoutRequests%1000)*1000000000;
+					nanosleep(&t, NULL);
                 } else {
                     ppf(CLR_ERROR); printf("CLIENT> Operazione n°%d fallita. Esco!\n", listaAzioni[i]); ppff();
                     break;
                 }
-
-                // sleep(3);
             }
         }
+
+        free(msg);
 
 
         // finite le azioni richieste, chiudo la connessione
 		if(closeConnection(socketPath) == 0) {
-            pp("CLIENT> Connessione terminata con successo.", CLR_INFO);
+            ppf(CLR_INFO); printf("CLIENT> Connessione terminata con successo.\n"); ppff();
         } else {
-            pp("CLIENT> Connessione non terminata!!", CLR_ERROR);
+            ppf(CLR_ERROR); printf("CLIENT> Connessione non terminata!!\n"); ppff();
         }
+
+        free(socketPath);
+
 		return 0;
 	} else {
-		pp("Fornisci almeno un argomento. Usa -h se non sei sicuro.", CLR_ERROR);
+		ppf(CLR_ERROR); printf("Fornisci almeno un argomento. Usa -h se non sei sicuro.\n"); ppff();
 		return 0;
 	}
     return 0;

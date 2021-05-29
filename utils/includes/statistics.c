@@ -14,7 +14,7 @@ static int printStats(const char* pathname) {
     extern pthread_mutex_t mutexStatistiche;
     FILE* filePointer;
 
-    filePointer = fopen("stats.txt", "w");
+    filePointer = fopen(pathname, "w");
 
     checkM1(filePointer == NULL, "impossibile creare file stats");
 
@@ -25,4 +25,9 @@ static int printStats(const char* pathname) {
     locka(mutexStatistiche);
     fputs(out, filePointer);
     unlocka(mutexStatistiche);
+
+    fclose(filePointer);
+    free(out);
+
+    return 0;
 }

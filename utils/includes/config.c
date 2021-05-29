@@ -81,6 +81,7 @@ int loadConfig(Config* conf) {
             }
         }
     }
+    free(riga);
 	fclose(fp);
 
     if(v == VARIABILI_PREVISTE) {
@@ -91,37 +92,37 @@ int loadConfig(Config* conf) {
 }
 
 void configLoader(Config* conf) {
-    pp("> Caricamento file di config", CLR_INFO);
+    ppf(CLR_INFO); printf("> Caricamento file di config\n"); ppff();
     switch(loadConfig(conf)) {
         case ERR_FILEOPENING:
-            pp("Errore durante l'apertura del file di config.", CLR_ERROR);
+            ppf(CLR_ERROR); printf("Errore durante l'apertura del file di config.\n"); ppff();
             exit(EXIT_FAILURE);
         break;
 
         case ERR_INVALIDKEY:
-            pp("Chiave del server non valida.", CLR_ERROR);
+            ppf(CLR_ERROR); printf("Chiave del server non valida.\n"); ppff();
             exit(EXIT_FAILURE);
         break;
 
         case ERR_NEGVALUE:
-            pp("Una o più variabili hanno un valore negativo o pari a 0.", CLR_ERROR);
+            ppf(CLR_ERROR); printf("Una o più variabili hanno un valore negativo o pari a 0.\n"); ppff();
             exit(EXIT_FAILURE);
         break;
 
         case ERR_EMPTYVALUE:
-            pp("Una o più variabili hanno un valore vuoto.", CLR_ERROR);
+            ppf(CLR_ERROR); printf("Una o più variabili hanno un valore vuoto.\n"); ppff();
             exit(EXIT_FAILURE);
         break;
 
         case ERR_UNSETVALUES:
-            pp("Una o più variabili non sono presenti nel file di config.", CLR_ERROR);
+            ppf(CLR_ERROR); printf("Una o più variabili non sono presenti nel file di config.\n"); ppff();
             exit(EXIT_FAILURE);
         break;
 
         case ERR_ILLEGAL:
-            pp("Testo illegale nel file di config.", CLR_ERROR);
+            ppf(CLR_ERROR); printf("Testo illegale nel file di config.\n"); ppff();
             exit(EXIT_FAILURE);
         break;
     }
-    pp("> Caricamento config completato.", CLR_INFO);
+    ppf(CLR_INFO); printf("> Caricamento config completato.\n"); ppff();
 }

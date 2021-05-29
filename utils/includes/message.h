@@ -8,6 +8,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <linux/limits.h>
 #include "actions.h"
 
 typedef struct {

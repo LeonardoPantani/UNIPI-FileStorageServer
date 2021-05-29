@@ -2,62 +2,18 @@
  * Author : Pierre-Henri Symoneaux
  */
 
-#include <stdlib.h>
 #include <string.h>
-#include "client_queue.h"
+#include "hash_table.h"
 
-//Hashtable element structure
-typedef struct hash_elem_t {
-	struct hash_elem_t* next; // Next element in case of a collision
-	
-    void* data;	// Pointer to the stored element
-	size_t data_length; // dimensione dati
-    
-    int lock; // identifica univocamente un client se ha bloccato il file (la relativa connessione) | -1 altrimenti
-    ClientQueue* codaRichiedentiLock;
-    pthread_cond_t* rilascioLock;
-	pthread_mutex_t* mutex;
-    
-    unsigned long updatedDate; // data in tempo unix dell'ultima modifica (o creazione)
-	char* path;
-    char key[]; 	// Key of the stored element
-} hash_elem_t;
-
-//Hashtabe structure
-typedef struct {
-	unsigned int capacity;	// Hashtable capacity (in terms of hashed keys)
-	unsigned int e_num;	// Number of element currently stored in the hashtable
-	hash_elem_t** table;	// The table containaing elements
-} hashtable_t;
-
-//Structure used for iterations
-typedef struct {
-	hashtable_t* ht; 	// The hashtable on which we iterate
-	unsigned int index;	// Current index in the table
-	hash_elem_t* elem; 	// Curent element in the list
-} hash_elem_it;
-
-// Inititalize hashtable iterator on hashtable 'ht'
-#define HT_ITERATOR(ht) {ht, 0, ht->table[0]}
-
-char err_ptr;
-void* HT_ERROR = &err_ptr; // Data pointing to HT_ERROR are returned in case of error
-
-/* 	Internal funcion to calculate hash for keys.
-	It's based on the DJB algorithm from Daniel J. Bernstein.
-	The key must be ended by '\0' character.*/
-static unsigned int ht_calc_hash(char* key)
-{
+static unsigned int ht_calc_hash(char* key) {
 	unsigned int h = 5381;
 	while(*(key++))
 		h = ((h << 5) + h) + (*key);
 	return h;
 }
 
-/* 	Create a hashtable with capacity 'capacity'
-	and return a pointer to it*/
-hashtable_t* ht_create(unsigned int capacity)
-{
+
+hashtable_t* ht_create(unsigned int capacity) {
 	hashtable_t* hasht = malloc(sizeof(hashtable_t));
 	if(!hasht)
 		return NULL;
@@ -74,19 +30,14 @@ hashtable_t* ht_create(unsigned int capacity)
 	return hasht;
 }
 
-/* 	Store data in the hashtable. If data with the same key are already stored,
-	they are overwritten, and return by the function. Else it returns NULL.
-	Returns HT_ERROR if there are memory alloc error */
-void* ht_put(hashtable_t* hasht, char* key, void* data, size_t data_length, int lock, unsigned long updatedDate, int clientID)
-{
-	if(data == NULL)
-		return NULL;
+
+void* ht_put(hashtable_t* hasht, char* key, void* data, size_t data_length, int lock, unsigned long updatedDate) {
 	unsigned int h = ht_calc_hash(key) % hasht->capacity;
 	hash_elem_t* e = hasht->table[h];
 
 	while(e != NULL)
 	{
-		if(!strcmp(e->key, key))
+		if(strcmp(e->key, key) == 0) // se ho già trovato una chiave uguale
 		{
 			void* ret = e->data;
 			e->data_length = data_length;
@@ -108,9 +59,14 @@ void* ht_put(hashtable_t* hasht, char* key, void* data, size_t data_length, int 
 	e->path = key;
 	e->data = data;
 	e->data_length = data_length;
-	e->lock = lock;
 	e->updatedDate = updatedDate;
+	e->codaRichiedentiLock = NULL;
+	e->lock = lock;
+	e->mutex = malloc(sizeof(pthread_mutex_t));
 	pthread_mutex_init(e->mutex, NULL);
+
+	e->rilascioLock = malloc(sizeof(pthread_cond_t));
+	pthread_cond_init(e->rilascioLock, NULL);
 
 	// Add the element at the beginning of the linked list
 	e->next = hasht->table[h];
@@ -120,65 +76,8 @@ void* ht_put(hashtable_t* hasht, char* key, void* data, size_t data_length, int 
 	return NULL;
 }
 
-/* Retrieve data from the hashtable */
-void* ht_get(hashtable_t* hasht, char* key)
-{
-	unsigned int h = ht_calc_hash(key) % hasht->capacity;
-	hash_elem_t* e = hasht->table[h];
-	while(e != NULL)
-	{
-		if(!strcmp(e->key, key))
-			return e->data;
-		e = e->next;
-	}
-	return NULL;
-}
 
-/* Retrieve data length from the hashtable */
-size_t ht_getDataLength(hashtable_t* hasht, char* key)
-{
-	unsigned int h = ht_calc_hash(key) % hasht->capacity;
-	hash_elem_t* e = hasht->table[h];
-	while(e != NULL)
-	{
-		if(!strcmp(e->key, key))
-			return e->data_length;
-		e = e->next;
-	}
-	return -1;
-}
-
-/* Retrieve lock from the hashtable */
-int ht_getLock(hashtable_t* hasht, char* key)
-{
-	unsigned int h = ht_calc_hash(key) % hasht->capacity;
-	hash_elem_t* e = hasht->table[h];
-	while(e != NULL)
-	{
-		if(!strcmp(e->key, key))
-			return e->lock;
-		e = e->next;
-	}
-	return -2;
-}
-
-/* Retrieve updatedDate from the hashtable */
-void* ht_getUpdatedDate(hashtable_t* hasht, char* key)
-{
-	unsigned int h = ht_calc_hash(key) % hasht->capacity;
-	hash_elem_t* e = hasht->table[h];
-	while(e != NULL)
-	{
-		if(!strcmp(e->key, key))
-			return &e->updatedDate;
-		e = e->next;
-	}
-	return NULL;
-}
-
-/* Retrieve path from the hashtable */
-char* ht_getPath(hashtable_t* hasht, char* key)
-{
+char* ht_getPath(hashtable_t* hasht, char* key) {
 	unsigned int h = ht_calc_hash(key) % hasht->capacity;
 	hash_elem_t* e = hasht->table[h];
 	while(e != NULL)
@@ -190,26 +89,28 @@ char* ht_getPath(hashtable_t* hasht, char* key)
 	return NULL;
 }
 
-/* 	Remove data from the hashtable. Return the data removed from the table
-	so that we can free memory if needed */
-void* ht_remove(hashtable_t* hasht, char* key)
-{
+
+void* ht_remove(hashtable_t* hasht, char* key) {
 	unsigned int h = ht_calc_hash(key) % hasht->capacity;
 	hash_elem_t* e = hasht->table[h];
 	hash_elem_t* prev = NULL;
 	while(e != NULL)
 	{
-		if(!strcmp(e->key, key))
+		if(strcmp(e->key, key) == 0) // trovato
 		{
-			void* ret = e->data;
+			//void* ret = e->data;
 			if(prev != NULL)
 				prev->next = e->next;
 			else
 				hasht->table[h] = e->next;
+			free(e->data);
+			free(e->mutex);
+			deleteQueue(e->codaRichiedentiLock);
+			free(e->rilascioLock);
 			free(e);
 			e = NULL;
 			hasht->e_num --;
-			return ret;
+			return e;
 		}
 		prev = e;
 		e = e->next;
@@ -217,102 +118,12 @@ void* ht_remove(hashtable_t* hasht, char* key)
 	return NULL;
 }
 
-/* List keys. k should have length equals or greater than the number of keys */
-void ht_list_keys(hashtable_t* hasht, char** k, size_t len)
-{
-	if(len < hasht->e_num)
-		return;
-	int ki = 0; //Index to the current string in **k
-	int i = hasht->capacity;
-	while(--i >= 0)
-	{
-		hash_elem_t* e = hasht->table[i];
-		while(e)
-		{
-			k[ki++] = e->key;
-			e = e->next;
-		}
-	}
-}
 
-/* 	List values. v should have length equals or greater 
-	than the number of stored elements */
-void ht_list_values(hashtable_t* hasht, void** v, size_t len)
-{
-	if(len < hasht->e_num)
-		return;
-	int vi = 0; //Index to the current string in **v
-	int i = hasht->capacity;
-	while(--i >= 0)
-	{
-		hash_elem_t* e = hasht->table[i];
-		while(e)
-		{
-			v[vi++] = e->data;
-			e = e->next;
-		}
+hash_elem_t* ht_getElement(hashtable_t* hasht, char* key) {
+	if(key == NULL) {
+		return NULL;
 	}
-}
 
-/* 	List locks. v should have length equals or greater 
-	than the number of stored elements */
-void ht_list_locks(hashtable_t* hasht, void** v, size_t len)
-{
-	if(len < hasht->e_num)
-		return;
-	int vi = 0; //Index to the current string in **v
-	int i = hasht->capacity;
-	while(--i >= 0)
-	{
-		hash_elem_t* e = hasht->table[i];
-		while(e)
-		{
-			v[vi++] = &e->lock;
-			e = e->next;
-		}
-	}
-}
-
-/* 	List updated. v should have length equals or greater 
-	than the number of stored elements */
-void ht_list_updatedDate(hashtable_t* hasht, void** v, size_t len)
-{
-	if(len < hasht->e_num)
-		return;
-	int vi = 0; //Index to the current string in **v
-	int i = hasht->capacity;
-	while(--i >= 0)
-	{
-		hash_elem_t* e = hasht->table[i];
-		while(e)
-		{
-			v[vi++] = &e->updatedDate;
-			e = e->next;
-		}
-	}
-}
-
-/* List paths. k should have length equals or greater than the number of keys */
-void ht_list_paths(hashtable_t* hasht, char** k, size_t len)
-{
-	if(len < hasht->e_num)
-		return;
-	int ki = 0; //Index to the current string in **k
-	int i = hasht->capacity;
-	while(--i >= 0)
-	{
-		hash_elem_t* e = hasht->table[i];
-		while(e)
-		{
-			k[ki++] = e->path;
-			e = e->next;
-		}
-	}
-}
-
-/* Retrieve entire element from the hashtable */
-hash_elem_t* ht_getElement(hashtable_t* hasht, char* key)
-{
 	unsigned int h = ht_calc_hash(key) % hasht->capacity;
 	hash_elem_t* e = hasht->table[h];
 	while(e != NULL)
@@ -324,9 +135,8 @@ hash_elem_t* ht_getElement(hashtable_t* hasht, char* key)
 	return NULL;
 }
 
-/* Iterate through table's elements. */
-hash_elem_t* ht_iterate(hash_elem_it* iterator)
-{
+
+hash_elem_t* ht_iterate(hash_elem_it* iterator) {
 	while(iterator->elem == NULL)
 	{
 		if(iterator->index < iterator->ht->capacity - 1)
@@ -344,24 +154,20 @@ hash_elem_t* ht_iterate(hash_elem_it* iterator)
 	return e;
 }
 
-/* Iterate through keys. */
-char* ht_iterate_keys(hash_elem_it* iterator)
-{
+
+char* ht_iterate_keys(hash_elem_it* iterator) {
 	hash_elem_t* e = ht_iterate(iterator);
 	return (e == NULL ? NULL : e->key);
 }
 
-/* Iterate through values. */
-void* ht_iterate_values(hash_elem_it* iterator)
-{
+
+void* ht_iterate_values(hash_elem_it* iterator) {
 	hash_elem_t* e = ht_iterate(iterator);
 	return (e == NULL ? NULL : e->data);
 }
 
-/* 	Removes all elements stored in the hashtable.
-	if free_data, all stored datas are also freed.*/
-void ht_clear(hashtable_t* hasht, int free_data)
-{
+
+void ht_clear(hashtable_t* hasht, int free_data) {
 	hash_elem_it it = HT_ITERATOR(hasht);
 	char* k = ht_iterate_keys(&it);
 	while(k != NULL)
@@ -371,19 +177,15 @@ void ht_clear(hashtable_t* hasht, int free_data)
 	}
 }
 
-/* 	Destroy the hash table, and free memory.
-	Data still stored are freed*/
-void ht_destroy(hashtable_t* hasht)
-{
+
+void ht_destroy(hashtable_t* hasht) {
 	ht_clear(hasht, 0); // Delete and free all.
 	free(hasht->table);
 	free(hasht);
 }
 
-/* Cerca una entry vecchia (per l'algoritmo di rimpiazzamento)
-	e la restituisce */
-hash_elem_t* ht_find_old_entry(hashtable_t* hasht)
-{
+
+hash_elem_t* ht_find_old_entry(hashtable_t* hasht) {
 	hash_elem_it it = HT_ITERATOR(hasht);
 	hash_elem_t* k = ht_iterate(&it);
 
@@ -407,67 +209,3 @@ hash_elem_t* ht_find_old_entry(hashtable_t* hasht)
 
 	return vecchio;
 }
-
-#ifdef TEST_HT
-#include <stdio.h>
-/* Main function for testing purpose only */
-int main()
-{
-	hashtable_t *ht = ht_create(1);
-	ht_put(ht, "foo", "bar", 1, 1, 1);
-	printf("%s\n", (char*)ht_get(ht, "foo"));
-	ht_put(ht, "foo", "rab", 1, 1, 1);
-	printf("%s\n", (char*)ht_get(ht, "foo"));
-	ht_remove(ht, "foo");
-	if(!ht_get(ht, "foo"))
-		printf("foo removed\n");
-
-	ht_put(ht, "foo", "bar", 1, 1, 1);
-	ht_put(ht, "toto", "titi", 1, 1, 1);
-
-	printf("Listing keys\n");
-	char* str[ht->e_num];
-	unsigned int i;
-	ht_list_keys(ht, str, ht->e_num);
-	for(i = 0; i < ht->e_num; i++)
-		printf("%s\n", str[i]);
-	
-	printf("Listing values\n");
-	ht_list_values(ht, (void**)str, ht->e_num);
-	for(i = 0; i < ht->e_num; i++)
-		printf("%s\n", str[i]);
-
-	hash_elem_it it = HT_ITERATOR(ht);
-	hash_elem_t* e = ht_iterate(&it);
-	while(e != NULL)
-	{
-		printf("%s = %s \n", e->key, (char*)e->data);
-		e = ht_iterate(&it);
-	}
-
-	for(int i = 0; i < 3; i++) {
-		printf("%d::\n", i);
-		hash_elem_it it3 = HT_ITERATOR(ht);
-		e = ht_iterate(&it3);
-		while(e != NULL)
-		{
-			printf("%s = %s \n", e->key, (char*)e->data);
-			e = ht_iterate(&it3);
-		}
-	}
-	
-
-	
-	printf("Iterating keys\n");
-	hash_elem_it it2 = HT_ITERATOR(ht);
-	char* k = ht_iterate_keys(&it2);
-	while(k != NULL)
-	{
-		printf("%s\n", k);
-		k = ht_iterate_keys(&it2);
-	}
-
-	ht_destroy(ht);
-	return 0;
-}
-#endif

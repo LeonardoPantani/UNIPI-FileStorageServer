@@ -9,16 +9,16 @@ static void setMessage(Message* msg, ActionType ac, int flags, char* path, void*
     msg->action = ac;
 
     msg->flags = flags;
-
+    
     if(path != NULL) {
         msg->path_length = strlen(path);
     } else {
         msg->path_length = 0;
     }
+
     msg->path = path;
+
 
     msg->data_length = data_length;
     msg->data = data;
-
-    char* a = data;
 }

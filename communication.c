@@ -95,6 +95,7 @@ int sendMessage(int fd, Message* msg) {
     #ifdef DEBUG_VERBOSE
         printf("=====================================\n"); fflush(stdout);
     #endif
+    
     return 0;
 }
 
@@ -102,8 +103,7 @@ int readMessage(int fd, Message* msg) {
     checkM1(msg == NULL, "msg nullo");
 
     // leggo tutto il messaggio (le stringhe non saranno valide)
-    int l, ret;
-    ret = read(fd, msg, sizeof(Message));
+    int ret = read(fd, msg, sizeof(Message));
     checkM1(ret != sizeof(Message) && ret != 0, "lettura msg iniziale");
 
     #ifdef DEBUG_VERBOSE
@@ -114,9 +114,9 @@ int readMessage(int fd, Message* msg) {
 
 
     // leggo path dinamicamente (se è 0 la lunghezza non leggo nulla)
-    if(msg->path_length > 0) {
-        msg->path = malloc(msg->path_length);
-        memset(msg->path, 0, msg->path_length);
+    if(msg->path_length > 0 && msg->path != NULL) {
+        msg->path = malloc(msg->path_length+1); // +1 così valgrind è contento
+        memset(msg->path, 0, msg->path_length+1); // +1 così valgrind è contento
         checkM1(msg->path == NULL, "malloc path");
 
         int remainingBytes = msg->path_length;
@@ -132,13 +132,12 @@ int readMessage(int fd, Message* msg) {
                 printf("Read message>> BYTE LETTI (path) (azione %d): %d\n", msg->action, ret); fflush(stdout);
             #endif
         }
-        msg->path[msg->path_length] = '\0';
     }
 
     // leggo data dinamicamente (se è 0 la lunghezza non leggo nulla)
-    if(msg->data_length > 0) {
-        msg->data = malloc(msg->data_length);
-        memset(msg->data, 0, msg->data_length);
+    if(msg->data_length > 0 && msg->data != NULL) {
+        msg->data = malloc(msg->data_length+1); // +1 così valgrind è contento
+        memset(msg->data, 0, msg->data_length+1); // +1 così valgrind è contento
         checkM1(msg->data == NULL, "malloc data");
 
         int remainingBytes = msg->data_length;

@@ -28,7 +28,8 @@ ClientQueue* createQueue(int maxClients) {
 
 
 void deleteQueue(ClientQueue *coda) {
-    free(coda->array);
+    if(coda != NULL)
+        free(coda->array);
     free(coda);
 }
 

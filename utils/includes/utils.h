@@ -10,6 +10,7 @@
 #include <string.h>
 #include <errno.h>
 
+#define CLR_IMPORTANT   95
 #define CLR_HIGHLIGHT   94
 #define CLR_WARNING     93
 #define CLR_SUCCESS     92
@@ -28,7 +29,7 @@
  * @return 1 se il simbolo è trovato, 0 altrimenti
 **/
 int containsCharacter(char ago, char* pagliaio) {
-    for(int i = 0; i < strlen(pagliaio); i++) {
+    for(unsigned int i = 0; i < strlen(pagliaio); i++) {
         if(pagliaio[i] == ago)
             return 1;
     }
@@ -50,20 +51,8 @@ void ppf(int num) { // stampa inizio colore
 /**
  * @brief Stampa fine del colore.
 **/
-void ppff() { // stampa fine colore
+void ppff(void) { // stampa fine colore
     printf("\033[0m");
-    fflush(stdout);
-}
-
-
-/**
- * @brief Stampa un messaggio colorato.
- * 
- * @param string    stringa da stampare
- * @param num       codice colore
-**/
-void pp(char* string, int num) {
-    printf("\033[%dm%s\033[0m\n", num, string);
     fflush(stdout);
 }
 

@@ -87,7 +87,7 @@ int writeFile(const char* pathname, const char* dirname);
  *                  != NULL -> se un file viene espulso dal server allora viene salvato in dirname
  *                  =  NULL -> se un file viene espulso dal server allora viene ignorato
  * 
- * @returns 0 in caso di successo, 0 in caso di fallimento (setta errno)
+ * @returns 0 in caso di successo, -1 in caso di fallimento (setta errno)
 **/
 int appendToFile(const char* pathname, void* buf, size_t size, const char* dirname);
 
