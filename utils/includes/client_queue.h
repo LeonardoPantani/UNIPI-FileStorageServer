@@ -1,6 +1,7 @@
 /**
  * @file    client_queue.h
  * @brief   Contiene l'header dei metodi utilizzati per la coda di client.
+ * @author  Leonardo Pantani
 **/
 
 #ifndef CLIENT_QUEUE_H_

@@ -1,57 +1,54 @@
 /**
  * @file    actions.h
- * @brief   Contiene i codici delle azioni delle richieste e risposta del server
+ * @brief   Contiene i codici delle azioni delle richieste e risposta del server.
+ * @author  Leonardo Pantani
 **/
 
 typedef enum {
     /**
-     * SERVER
+     *  RISPOSTE SERVER -> CLIENT
     **/
-   AC_WELCOME = 0,
-   AC_STOPPING = 1,
-   AC_CANTDO = 11,
-   AC_FILEOPENED = 12,
-   AC_OPEN = 13,
-   AC_FILEEXISTS = 14,
-   AC_FILENOTEXISTS = 15,
-   AC_MAXCONNECTIONSREACHED = 16,
-   AC_FILESVD = 17,
-   AC_FLUSH_START = 19,
-   AC_FLUSHEDFILE = 20,
-   AC_FLUSH_END = 21,
-   AC_READ = 22,
-   AC_FILERCVD = 23,
-   AC_READ_MULTIPLE = 24,
-   AC_START_SEND = 25,
-   AC_FILE_SENT = 26,
-   AC_FINISH_SEND = 27,
-   AC_NOTFORU = 28,
-   AC_CLOSE = 29,
-   AC_CLOSED = 30,
-   AC_DELETED = 31,
-   AC_WRITE = 32,
-   AC_FILENOTNEW = 33,
-   AC_APPEND = 34,
-   AC_LOCK = 35,
-   AC_UNLOCK = 36,
-   AC_LOCKED = 37,
-   AC_UNLOCKED = 38,
-   AC_BADRQST = 39,
+    // generiche
+    ANS_UNKNOWN             = 0,
+    ANS_NO_PERMISSION       = 1,
+    ANS_MAX_CONN_REACHED    = 2,
+    ANS_OK                  = 3,
+    ANS_BAD_RQST            = 4,
+
+    // handshake server-client
+    ANS_WELCOME             = 5,
+    ANS_HELLO               = 6,
+
+    // relative a file
+    ANS_FILE_EXISTS         = 7,
+    ANS_FILE_NOT_EXISTS     = 8,
+    ANS_STREAM_START        = 9,
+    ANS_STREAM_FILE         = 10,
+    ANS_STREAM_END          = 11,
+
 
     /**
-     * CLIENT
-    **/
-   AC_HELLO   = 2,
-   AC_WRITE_RECU = 4,
-   AC_WRITE_LIST = 5,
-   AC_READ_LIST = 6,
-   AC_READ_RECU = 7,
-   AC_ACQUIRE_MUTEX = 8,
-   AC_RELEASE_MUTEX = 9,
-   AC_DELETE = 10,
+     * RICHIESTE CLIENT -> SERVER
+    */
+    REQ_OPEN                = 12,
+    REQ_READ                = 13,
+    REQ_READ_N              = 14,
+    REQ_WRITE               = 15,
+    REQ_APPEND              = 16,
+    REQ_LOCK                = 17,
+    REQ_UNLOCK              = 18,
+    REQ_CLOSE               = 19,
+    REQ_DELETE              = 20,
 
-   /**
-    * Altro
+
+    /**
+     * AZIONI DEL CLIENT (servono per identificare l'operazione da svolgere)
     **/
-   AC_UNKNOWN = 50,
+    AC_WRITE_RECU           = 1, // -w
+    AC_WRITE_LIST           = 2, // -W
+    AC_READ_LIST            = 3, // -r
+    AC_READ_RECU            = 4, // -R
+    AC_ACQUIRE_MUTEX        = 5, // -l
+    AC_RELEASE_MUTEX        = 6, // -u
+    AC_DELETE               = 7, // -c
 } ActionType;

@@ -1,6 +1,7 @@
 /**
  * @file    message.h
  * @brief   Contiene l'header delle funzioni che lavorano sui messaggi e la loro implementazione come strutture.
+ * @author  Leonardo Pantani
 **/
 
 #ifndef MESSAGE_H_

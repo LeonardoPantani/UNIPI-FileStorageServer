@@ -1,6 +1,7 @@
 /**
  * @file    macro.h
  * @brief   Implementa alcune define di utilità, principalmente per la stampa di errori e per velocizzare la scrittura del codice.
+ * @author  Leonardo Pantani
 **/
 
 #ifndef MACRO_H_
@@ -22,6 +23,8 @@
 #else
     #define stampaDebug(testo) {}
 #endif
+
+#define printSave(f, ...) fprintf(stdout, f, ##__VA_ARGS__); fprintf(stdout, "\n"); fflush(stdout); locka(mutexFileLog); fprintf(fileLog, f, ##__VA_ARGS__); fprintf(fileLog, "\n"); fflush(fileLog); unlocka(mutexFileLog);
 
 #define locka(mutex) if(pthread_mutex_lock(&mutex) != 0) { fprintf(stderr, "Lock semaforo fallita | File %s Riga %d\n", __FILE__, __LINE__); exit(EXIT_FAILURE); }
 #define unlocka(mutex) if(pthread_mutex_unlock(&mutex) != 0) { fprintf(stderr, "Unlock semaforo fallita | File %s Riga %d\n", __FILE__, __LINE__); exit(EXIT_FAILURE); }

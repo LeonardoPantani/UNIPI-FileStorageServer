@@ -1,17 +1,16 @@
 /**
  * @file    communication.c
  * @brief   Contiene l'implementazione di alcune funzioni che permettono lo scambio di messaggi tra client e server.
- * 
- * NOTA: E' a più basso livello rispetto ai metodi di api.c, infatti vanno usate quelle per comunicare col server...
- * ... mentre il server deve usare solamente queste per comunicare con il client.
+ * @note    E' a più basso livello rispetto ai metodi di api.c, infatti vanno usate quelle per comunicare col server, mentre il server deve usare solamente queste per comunicare con il client.
+ * @author  Leonardo Pantani
 **/
+
 #include <stdio.h>
 #include <unistd.h>
 
 #include "utils/includes/macro.h"
 #include "utils/includes/utils.h"
 #include "communication.h"
-
 
 
 int setSocketAssociation(int fd, char* socketname) {

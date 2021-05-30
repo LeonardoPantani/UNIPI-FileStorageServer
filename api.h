@@ -1,7 +1,9 @@
 /**
  * @file    api.h
  * @brief   Contiene l'header dei metodi utilizzati dal client per comunicare col server.
+ * @author  Leonardo Pantani
 **/
+
 #include <stdio.h>
 #include <time.h>
 

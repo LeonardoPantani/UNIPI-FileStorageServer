@@ -1,13 +1,20 @@
 /**
  * @file    config.c
  * @brief   Contiene l'implementazione dei metodi per leggere la configurazione.
+ * @author  Leonardo Pantani
 **/
 
+#define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <pthread.h>
 
+#include "macro.h"
 #include "config.h"
+
+extern FILE* fileLog;
+extern pthread_mutex_t mutexFileLog;
 
 int loadConfig(Config* conf) {
     int v = 0, temp;
@@ -31,44 +38,44 @@ int loadConfig(Config* conf) {
                 if(variabile != NULL) {
                     valore = strtok_r(NULL, "=", &saveptr);
                     if(valore != NULL) {
-                        valore[strlen(valore) - 1] = '\0';
+                        valore[strlen(valore)] = '\0';
                         #ifdef DEBUG
-                            ppf(CLR_INFO); printf(">> %s: %s\n", variabile, valore); ppff();
+                            ppf(CLR_INFO); printSave(">> %s: %s", variabile, valore); ppff();
                         #endif
-                        if(strcmp(variabile, "!SERVER_KEY") == 0) {
-                            if(strcmp(valore, KEY) != 0) { // if server key is not the same of constant then stop
+                        if(strcmpnl(variabile, "!SERVER_KEY") == 0) {
+                            if(strcmpnl(valore, KEY) != 0) { // if server key is not the same of constant then stop
                                 return ERR_INVALIDKEY;
                             }
                             v++;
-                        } else if(strcmp(variabile, "MAX_WORKERS") == 0) {
+                        } else if(strcmpnl(variabile, "MAX_WORKERS") == 0) {
                             temp = atoi(valore);
                             if(temp <= 0) {
                                 return ERR_NEGVALUE;
                             }
                             (*conf).max_workers = atoi(valore);
                             v++;
-                        } else if(strcmp(variabile, "MAX_CONNECTIONS") == 0) {
+                        } else if(strcmpnl(variabile, "MAX_CONNECTIONS") == 0) {
                             temp = atoi(valore);
                             if(temp <= 0) {
                                 return ERR_NEGVALUE;
                             }
                             (*conf).max_connections = atoi(valore);
                             v++;
-                        } else if(strcmp(variabile, "MAX_MEMORY_SIZE") == 0) {
+                        } else if(strcmpnl(variabile, "MAX_MEMORY_SIZE") == 0) {
                             temp = atoi(valore);
                             if(temp <= 0) {
                                 return ERR_NEGVALUE;
                             }
                             (*conf).max_memory_size = atoi(valore);
                             v++;
-                        } else if(strcmp(variabile, "MAX_FILES") == 0) {
+                        } else if(strcmpnl(variabile, "MAX_FILES") == 0) {
                             temp = atoi(valore);
                             if(temp <= 0) {
                                 return ERR_NEGVALUE;
                             }
                             (*conf).max_files = atoi(valore);
                             v++;
-                        } else if(strcmp(variabile, "SOCKET_FILE_NAME") == 0) {
+                        } else if(strcmpnl(variabile, "SOCKET_FILE_NAME") == 0) {
                             strcpy((*conf).socket_file_name, valore);
                             v++;
                         }
@@ -92,37 +99,37 @@ int loadConfig(Config* conf) {
 }
 
 void configLoader(Config* conf) {
-    ppf(CLR_INFO); printf("> Caricamento file di config\n"); ppff();
+    ppf(CLR_INFO); printSave("> Caricamento file di config"); ppff();
     switch(loadConfig(conf)) {
         case ERR_FILEOPENING:
-            ppf(CLR_ERROR); printf("Errore durante l'apertura del file di config.\n"); ppff();
+            ppf(CLR_ERROR); printSave("Errore durante l'apertura del file di config."); ppff();
             exit(EXIT_FAILURE);
         break;
 
         case ERR_INVALIDKEY:
-            ppf(CLR_ERROR); printf("Chiave del server non valida.\n"); ppff();
+            ppf(CLR_ERROR); printSave("Chiave del server non valida."); ppff();
             exit(EXIT_FAILURE);
         break;
 
         case ERR_NEGVALUE:
-            ppf(CLR_ERROR); printf("Una o più variabili hanno un valore negativo o pari a 0.\n"); ppff();
+            ppf(CLR_ERROR); printSave("Una o più variabili hanno un valore negativo o pari a 0."); ppff();
             exit(EXIT_FAILURE);
         break;
 
         case ERR_EMPTYVALUE:
-            ppf(CLR_ERROR); printf("Una o più variabili hanno un valore vuoto.\n"); ppff();
+            ppf(CLR_ERROR); printSave("Una o più variabili hanno un valore vuoto."); ppff();
             exit(EXIT_FAILURE);
         break;
 
         case ERR_UNSETVALUES:
-            ppf(CLR_ERROR); printf("Una o più variabili non sono presenti nel file di config.\n"); ppff();
+            ppf(CLR_ERROR); printSave("Una o più variabili non sono presenti nel file di config."); ppff();
             exit(EXIT_FAILURE);
         break;
 
         case ERR_ILLEGAL:
-            ppf(CLR_ERROR); printf("Testo illegale nel file di config.\n"); ppff();
+            ppf(CLR_ERROR); printSave("Testo illegale nel file di config."); ppff();
             exit(EXIT_FAILURE);
         break;
     }
-    ppf(CLR_INFO); printf("> Caricamento config completato.\n"); ppff();
+    ppf(CLR_INFO); printSave("> Caricamento config completato."); ppff();
 }

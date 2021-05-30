@@ -1,8 +1,9 @@
 /**
  * @file    api.c
- * @brief   Contiene l'implementazione delle funzioni dell'api
- *          che permette al client di collegarsi al server.
+ * @brief   Contiene l'implementazione delle funzioni dell'api che permette al client di collegarsi al server.
+ * @author  Leonardo Pantani
 **/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -87,20 +88,20 @@ int openFile(const char* pathname, int flags) { // O_CREATE = 1 | O_LOCK = 2 | O
     checkStop(msg == NULL, "malloc risposta");
     // fine variabile per contenere richieste
 
-    setMessage(msg, AC_OPEN, flags, (char*)pathname, NULL, 0); // inizializzo
+    setMessage(msg, REQ_OPEN, flags, (char*)pathname, NULL, 0); // inizializzo
 
     int socketConnection;
     extern char ejectedFileFolder[PATH_MAX];
 
     if((socketConnection = searchAssocByName(socketPath)) != -1) {
-        setMessage(msg, AC_OPEN, flags, (char*)pathname, NULL, 0);
+        setMessage(msg, REQ_OPEN, flags, (char*)pathname, NULL, 0);
 
         if(sendMessage(socketConnection, msg) == 0) {
             // una volta inviata la richiesta di check del file
             int esito = readMessage(socketConnection, msg);
             if(esito == 0) {
                 switch(msg->action) {
-                    case AC_FILEOPENED: {
+                    case ANS_OK: {
                         printf("CLIENT> File '%s' aperto!\n", pathname); fflush(stdout);
                         if(flags == 2 || flags == 3) {
                             ppf(CLR_IMPORTANT); printf("CLIENT> File '%s' lockato!\n", pathname); ppff();
@@ -108,15 +109,15 @@ int openFile(const char* pathname, int flags) { // O_CREATE = 1 | O_LOCK = 2 | O
                         break;
                     }
 
-                    case AC_BADRQST: {
+                    case ANS_BAD_RQST: {
                         printf("CLIENT> Richiesta errata!\n"); fflush(stdout);
                         errno = EBADRQC;
                         return -1;
                     }
 
-                    case AC_FLUSH_START: {
+                    case ANS_STREAM_START: {
                         esito = readMessage(socketConnection, msg);
-                        while(esito == 0 && msg->action != AC_FLUSH_END) {
+                        while(esito == 0 && msg->action != ANS_STREAM_END) {
                             ppf(CLR_HIGHLIGHT); printf("CLIENT> Espulso file remoto '%s' (%d bytes) per fare spazio a %s\n", msg->path, msg->data_length, pathname); ppff();
                             if(strcmp(ejectedFileFolder, "#") == 0) {
                                 ppf(CLR_WARNING); printf("CLIENT> Il file remoto '%s' (%d bytes) non verrà salvato perché non è stata specificata nessuna cartella con -D.\n", msg->path, msg->data_length); ppff();
@@ -148,7 +149,7 @@ int openFile(const char* pathname, int flags) { // O_CREATE = 1 | O_LOCK = 2 | O
                         
                         esito = readMessage(socketConnection, msg);
                         if(esito == 0) {
-                            if(msg->action == AC_FILEOPENED) {
+                            if(msg->action == ANS_OK) {
                                 printf("CLIENT> File '%s' aperto!\n", pathname); fflush(stdout);
                                 if(flags == 2 || flags == 3) {
                                     ppf(CLR_IMPORTANT); printf("CLIENT> File '%s' lockato!\n", pathname); ppff();
@@ -159,13 +160,13 @@ int openFile(const char* pathname, int flags) { // O_CREATE = 1 | O_LOCK = 2 | O
                         break;
                     }
 
-                    case AC_FILEEXISTS: {
+                    case ANS_FILE_EXISTS: {
                         ppf(CLR_ERROR); printf("CLIENT> Il file '%s' esiste già, non puoi fare una CREATE.\n", pathname); ppff();
                         errno = EEXIST;
                         return -1;
                     }
 
-                    case AC_FILENOTEXISTS: {
+                    case ANS_FILE_NOT_EXISTS: {
                         ppf(CLR_ERROR); printf("CLIENT> Il file '%s' non esiste, devi fare prima una CREATE.\n", pathname); ppff();
                         errno = ENOENT;
                         return -1;
@@ -202,7 +203,7 @@ int readFile(const char* pathname, void** buf, size_t* size) {
     checkStop(msg == NULL, "malloc risposta");
     // fine variabile per contenere richieste
 
-    setMessage(msg, AC_READ, 0, (char*)pathname, NULL, 0); // inizializzo
+    setMessage(msg, REQ_READ, 0, (char*)pathname, NULL, 0); // inizializzo
 
     int socketConnection;
 
@@ -212,20 +213,20 @@ int readFile(const char* pathname, void** buf, size_t* size) {
             int esito = readMessage(socketConnection, msg);
             if(esito == 0) {
                 switch(msg->action) {
-                    case AC_FILESVD: {
+                    case ANS_OK: {
                         *buf = msg->data;
                         *size = msg->data_length;
                         ppf(CLR_INFO); printf("CLIENT> File '%s' salvato in memoria.\n", pathname); ppff();
                         break;
                     }
 
-                    case AC_NOTFORU: {
+                    case ANS_NO_PERMISSION: {
                         ppf(CLR_ERROR); printf("CLIENT> Il file '%s' non può essere letto perché è lockato da un altro client.\n", pathname); ppff();
                         errno = EACCES;
                         return -1;
                     }
 
-                    case AC_FILENOTEXISTS: {
+                    case ANS_FILE_NOT_EXISTS: {
                         ppf(CLR_ERROR); printf("CLIENT> Il file '%s' non esiste, non può essere letto.\n", pathname); ppff();
                         errno = ENOENT;
                         return -1;
@@ -266,7 +267,7 @@ int readNFiles(int N, const char* dirname) {
         N = -1;
     }
 
-    setMessage(msg, AC_READ_MULTIPLE, 0, NULL, &N, sizeof(int)); // inizializzo
+    setMessage(msg, REQ_READ_N, 0, NULL, &N, sizeof(int)); // inizializzo
 
     int socketConnection;
     extern char savedFileFolder[PATH_MAX];
@@ -277,9 +278,9 @@ int readNFiles(int N, const char* dirname) {
             int esito = readMessage(socketConnection, msg);
             if(esito == 0) {
                 switch(msg->action) {
-                    case AC_START_SEND: {
+                    case ANS_STREAM_START: {
                         esito = readMessage(socketConnection, msg);
-                        while(esito == 0 && msg->action != AC_FINISH_SEND) {
+                        while(esito == 0 && msg->action != ANS_STREAM_END) {
                             ppf(CLR_HIGHLIGHT); printf("CLIENT> File remoto '%s' ricevuto dal server.\n", msg->path); ppff();
                             if(strcmp(savedFileFolder, "#") == 0) {
                                 ppf(CLR_WARNING); printf("CLIENT> Il file remoto '%s' (%d bytes) non verrà salvato perché non è stata specificata nessuna cartella con -d.\n", msg->path, msg->data_length); ppff();
@@ -312,7 +313,7 @@ int readNFiles(int N, const char* dirname) {
                         break;
                     }
 
-                    case AC_FILENOTEXISTS: { // modo simpatico per dire che non ci sono file da mandare
+                    case ANS_FILE_NOT_EXISTS: { // modo simpatico per dire che non ci sono file da mandare
                         ppf(CLR_ERROR); printf("CLIENT> Il server non possiede file da inviarti.\n"); ppff();
                         errno = ENOENT;
                         return -1;
@@ -349,7 +350,7 @@ int writeFile(const char* pathname, const char* dirname) {
     checkStop(msg == NULL, "malloc risposta");
     // fine variabile per contenere richieste
 
-    setMessage(msg, AC_UNKNOWN, 0, NULL, NULL, 0); // inizializzo
+    setMessage(msg, ANS_UNKNOWN, 0, NULL, NULL, 0); // inizializzo
 
     int socketConnection;
 
@@ -371,7 +372,7 @@ int writeFile(const char* pathname, const char* dirname) {
 
         fclose(file);
 
-        setMessage(msg, AC_WRITE, 0, (char*)pathname, buffer, sb.st_size);
+        setMessage(msg, REQ_WRITE, 0, (char*)pathname, buffer, sb.st_size);
 
         if(sendMessage(socketConnection, msg) == 0) {
             free(buffer);
@@ -379,14 +380,14 @@ int writeFile(const char* pathname, const char* dirname) {
             int esito = readMessage(socketConnection, msg);
             if(esito == 0) {
                 switch(msg->action) {
-                    case AC_FILERCVD: {
+                    case ANS_OK: {
                         printf("CLIENT> File '%s' (%ld bytes) caricato!\n", pathname, sb.st_size); fflush(stdout);
                         break;
                     }
                     
-                    case AC_FLUSH_START: {
+                    case ANS_STREAM_START: {
                         esito = readMessage(socketConnection, msg);
-                        while(esito == 0 && msg->action != AC_FLUSH_END) {
+                        while(esito == 0 && msg->action != ANS_STREAM_END) {
                             ppf(CLR_HIGHLIGHT); printf("CLIENT> Espulso file remoto '%s' (%d bytes) per fare spazio a %s (%ld bytes)\n", msg->path, msg->data_length, pathname, sb.st_size); ppff();
                             if(dirname == NULL) {
                                 ppf(CLR_WARNING); printf("CLIENT> Il file remoto '%s' (%d bytes) non verrà salvato perché non è stata specificata nessuna cartella (dirname = NULL).\n", msg->path, msg->data_length); ppff();
@@ -418,7 +419,7 @@ int writeFile(const char* pathname, const char* dirname) {
                         
                         esito = readMessage(socketConnection, msg);
                         if(esito == 0) {
-                            if(msg->action == AC_FILERCVD) {
+                            if(msg->action == ANS_OK) {
                                 printf("CLIENT> File '%s' (%ld bytes) caricato!\n", pathname, sb.st_size); fflush(stdout);
                             }
                         }
@@ -426,13 +427,13 @@ int writeFile(const char* pathname, const char* dirname) {
                         break;
                     }
 
-                    case AC_FILENOTNEW: {
+                    case ANS_BAD_RQST: {
                         ppf(CLR_ERROR); printf("CLIENT> Il file '%s' (%ld bytes) non è stato creato e lockato di recente. Impossibile scriverci.\n", pathname, sb.st_size); ppff();
                         errno = EINVAL;
                         return -1;
                     }
 
-                    case AC_FILENOTEXISTS: {
+                    case ANS_FILE_NOT_EXISTS: {
                         ppf(CLR_ERROR); printf("CLIENT> Il file '%s' (%ld bytes) non esiste, devi fare prima una CREATE.\n", pathname, sb.st_size); ppff();
                         errno = ENOENT;
                         return -1;
@@ -469,26 +470,26 @@ int appendToFile(const char* pathname, void* buf, size_t size, const char* dirna
     checkStop(msg == NULL, "malloc risposta");
     // fine variabile per contenere richieste
 
-    setMessage(msg, AC_UNKNOWN, 0, NULL, NULL, 0); // inizializzo
+    setMessage(msg, ANS_UNKNOWN, 0, NULL, NULL, 0); // inizializzo
 
     int socketConnection;
 
     if((socketConnection = searchAssocByName(socketPath)) != -1) {
-        setMessage(msg, AC_APPEND, 0, (char*)pathname, buf, size);
+        setMessage(msg, REQ_APPEND, 0, (char*)pathname, buf, size);
 
         if(sendMessage(socketConnection, msg) == 0) {
             // una volta inviata la richiesta di check del file
             int esito = readMessage(socketConnection, msg);
             if(esito == 0) {
                 switch(msg->action) {
-                    case AC_FILESVD: {
+                    case ANS_OK: {
                         printf("CLIENT> Buffer da appendere (%zu bytes) caricato!\n", size); fflush(stdout);
                         break;
                     }
                     
-                    case AC_FLUSH_START: {
+                    case ANS_STREAM_START: {
                         esito = readMessage(socketConnection, msg);
-                        while(esito == 0 && msg->action != AC_FLUSH_END) {
+                        while(esito == 0 && msg->action != ANS_STREAM_END) {
                             ppf(CLR_HIGHLIGHT); printf("CLIENT> Espulso file remoto '%s' (%d bytes) per fare spazio al buffer da appendere (%zu bytes)\n", msg->path, msg->data_length, size); ppff();
                             if(dirname == NULL) {
                                 ppf(CLR_WARNING); printf("CLIENT> Il file remoto '%s' (%d bytes) non verrà salvato perché non è stata specificata nessuna cartella (dirname = NULL).\n", msg->path, msg->data_length); ppff();
@@ -520,7 +521,7 @@ int appendToFile(const char* pathname, void* buf, size_t size, const char* dirna
                         
                         esito = readMessage(socketConnection, msg);
                         if(esito == 0) {
-                            if(msg->action == AC_FILERCVD) {
+                            if(msg->action == ANS_OK) {
                                 printf("CLIENT> Buffer da appendere (%zu bytes) caricato!\n", size); fflush(stdout);
                             }
                         }
@@ -528,13 +529,13 @@ int appendToFile(const char* pathname, void* buf, size_t size, const char* dirna
                         break;
                     }
 
-                    case AC_NOTFORU: {
+                    case ANS_NO_PERMISSION: {
                         ppf(CLR_ERROR); printf("CLIENT> Il file '%s' non può essere unlockato perché non ne possiedi i diritti.\n", pathname); ppff();
                         errno = ENOENT;
                         return -1;
                     }
 
-                    case AC_FILENOTEXISTS: {
+                    case ANS_FILE_NOT_EXISTS: {
                         ppf(CLR_ERROR); printf("CLIENT> Il file '%s' (%zu bytes) non esiste, devi fare prima una CREATE.\n", pathname, size); ppff();
                         errno = ENOENT;
                         return -1;
@@ -571,30 +572,24 @@ int lockFile(const char* pathname) {
     checkStop(msg == NULL, "malloc risposta");
     // fine variabile per contenere richieste
 
-    setMessage(msg, AC_UNKNOWN, 0, NULL, NULL, 0); // inizializzo
+    setMessage(msg, ANS_UNKNOWN, 0, NULL, NULL, 0); // inizializzo
 
     int socketConnection;
 
     if((socketConnection = searchAssocByName(socketPath)) != -1) {
-        setMessage(msg, AC_LOCK, 0, (char*)pathname, NULL, 0);
+        setMessage(msg, REQ_LOCK, 0, (char*)pathname, NULL, 0);
 
         if(sendMessage(socketConnection, msg) == 0) {
             int esito = readMessage(socketConnection, msg);
             if(esito == 0) {
                 switch(msg->action) {
-                    case AC_LOCKED: {
-                        ppf(CLR_IMPORTANT); printf("CLIENT> File '%s' lockato! (AC_LOCK)\n", pathname); ppff();
+                    case ANS_OK: {
+                        ppf(CLR_IMPORTANT); printf("CLIENT> File '%s' lockato! (REQ_LOCK)\n", pathname); ppff();
                         break;
                     }
 
-                    case AC_DELETED: {
-                        ppf(CLR_ERROR); printf("CLIENT> Il file '%s' è stato eliminato mentre si cercava di lockarlo.\n", pathname); ppff();
-                        errno = ENOENT;
-                        return -1;
-                    }
-
-                    case AC_FILENOTEXISTS: {
-                        ppf(CLR_ERROR); printf("CLIENT> Il file '%s' non esiste, non puoi lockarlo.\n", pathname); ppff();
+                    case ANS_FILE_NOT_EXISTS: {
+                        ppf(CLR_ERROR); printf("CLIENT> Il file '%s' non esiste (o è stato cancellato mentre eri in attesa), non puoi lockarlo.\n", pathname); ppff();
                         errno = ENOENT;
                         return -1;
                     }
@@ -630,29 +625,29 @@ int unlockFile(const char* pathname) {
     checkStop(msg == NULL, "malloc risposta");
     // fine variabile per contenere richieste
 
-    setMessage(msg, AC_UNKNOWN, 0, NULL, NULL, 0); // inizializzo
+    setMessage(msg, ANS_UNKNOWN, 0, NULL, NULL, 0); // inizializzo
 
     int socketConnection;
 
     if((socketConnection = searchAssocByName(socketPath)) != -1) {
-        setMessage(msg, AC_UNLOCK, 0, (char*)pathname, NULL, 0);
+        setMessage(msg, REQ_UNLOCK, 0, (char*)pathname, NULL, 0);
 
         if(sendMessage(socketConnection, msg) == 0) {
             int esito = readMessage(socketConnection, msg);
             if(esito == 0) {
                 switch(msg->action) {
-                    case AC_UNLOCKED: {
-                        ppf(CLR_IMPORTANT); printf("CLIENT> File '%s' unlockato! (AC_UNLOCK)\n", pathname); ppff();
+                    case ANS_OK: {
+                        ppf(CLR_IMPORTANT); printf("CLIENT> File '%s' unlockato! (REQ_UNLOCK)\n", pathname); ppff();
                         break;
                     }
 
-                    case AC_NOTFORU: {
+                    case ANS_NO_PERMISSION: {
                         ppf(CLR_ERROR); printf("CLIENT> Il file '%s' non può essere unlockato perché non ne possiedi i diritti.\n", pathname); ppff();
                         errno = ENOENT;
                         return -1;
                     }
 
-                    case AC_FILENOTEXISTS: {
+                    case ANS_FILE_NOT_EXISTS: {
                         ppf(CLR_ERROR); printf("CLIENT> Il file '%s' non esiste, non puoi lockarlo.\n", pathname); ppff();
                         errno = ENOENT;
                         return -1;
@@ -689,7 +684,7 @@ int closeFile(const char* pathname) {
     checkStop(msg == NULL, "malloc risposta");
     // fine variabile per contenere richieste
 
-    setMessage(msg, AC_CLOSE, 0, (char*)pathname, NULL, 0); // inizializzo
+    setMessage(msg, REQ_CLOSE, 0, (char*)pathname, NULL, 0); // inizializzo
 
     int socketConnection;
 
@@ -699,18 +694,18 @@ int closeFile(const char* pathname) {
             int esito = readMessage(socketConnection, msg);
             if(esito == 0) {
                 switch(msg->action) {
-                    case AC_CLOSED: {
+                    case ANS_OK: {
                         ppf(CLR_HIGHLIGHT); printf("CLIENT> File '%s' chiuso con successo.\n", pathname); ppff();
                         break;
                     }
 
-                    case AC_NOTFORU: {
+                    case ANS_NO_PERMISSION: {
                         ppf(CLR_ERROR); printf("CLIENT> Il file '%s' non può essere chiuso perché è lockato da un altro client.\n", pathname); ppff();
                         errno = EACCES;
                         return -1;
                     }
 
-                    case AC_FILENOTEXISTS: {
+                    case ANS_FILE_NOT_EXISTS: {
                         ppf(CLR_ERROR); printf("CLIENT> Il file '%s' non esiste, non puoi chiuderlo.\n", pathname); ppff();
                         errno = ENOENT;
                         return -1;
@@ -740,7 +735,7 @@ int removeFile(const char* pathname) {
     checkStop(msg == NULL, "malloc risposta");
     // fine variabile per contenere richieste
 
-    setMessage(msg, AC_DELETE, 0, (char*)pathname, NULL, 0); // inizializzo
+    setMessage(msg, REQ_DELETE, 0, (char*)pathname, NULL, 0); // inizializzo
 
     int socketConnection;
 
@@ -750,18 +745,18 @@ int removeFile(const char* pathname) {
             int esito = readMessage(socketConnection, msg);
             if(esito == 0) {
                 switch(msg->action) {
-                    case AC_DELETED: {
+                    case ANS_OK: {
                         ppf(CLR_HIGHLIGHT); printf("CLIENT> File '%s' eliminato con successo.\n", pathname); ppff();
                         break;
                     }
 
-                    case AC_NOTFORU: {
+                    case ANS_NO_PERMISSION: {
                         ppf(CLR_ERROR); printf("CLIENT> Il file '%s' non può essere eliminato perché è lockato da un altro client.\n", pathname); ppff();
                         errno = EACCES;
                         return -1;
                     }
 
-                    case AC_FILENOTEXISTS: {
+                    case ANS_FILE_NOT_EXISTS: {
                         ppf(CLR_ERROR); printf("CLIENT> Il file '%s' non esiste, non puoi eliminarlo.\n", pathname); ppff();
                         errno = ENOENT;
                         return -1;

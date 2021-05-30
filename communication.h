@@ -1,7 +1,9 @@
 /**
  * @file    communication.c
  * @brief   Contiene l'header delle funzioni usate per scambiare messaggi tra client e server.
+ * @author  Leonardo Pantani
 **/
+
 #ifndef COMMUNICATION_H_
 #define COMMUNICATION_H_
 

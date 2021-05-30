@@ -1,6 +1,7 @@
 /**
  * @file    client_queue.c
  * @brief   Contiene l'implementazione della coda dei client in attesa.
+ * @author  Leonardo Pantani
 **/
 
 #include <stdio.h>

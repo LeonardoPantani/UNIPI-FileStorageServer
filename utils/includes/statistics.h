@@ -1,6 +1,7 @@
 /**
  * @file    statistics.h
  * @brief   Contiene l'implementazione della struct statistics per le statistiche del server.
+ * @author  Leonardo Pantani
 **/
 
 #ifndef STATISTICS_H_
@@ -12,6 +13,7 @@ typedef struct {
     int n_lock;
     int n_openlock;
     int n_unlock;
+    int n_delete;
     int n_close;
 
     int max_size_reached;

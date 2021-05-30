@@ -1,6 +1,7 @@
 /**
  * @file    config.h
  * @brief   Contiene l'header delle funzioni per caricare il config e la struttura che contiene il config.
+ * @author  Leonardo Pantani
 **/
 
 #ifndef CONFIG_H_

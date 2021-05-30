@@ -1,7 +1,9 @@
 /**
  * @file utils.h
- * @brief Contiene funzioni di utilità, comprese stampe colorate, debug eccetera.
+ * @brief Contiene funzioni di utilità, comprese stampe colorate, debug, comparazioni di stringhe custom e altro.
+ * @author  Leonardo Pantani
 **/
+
 #ifndef UTILS_H_
 #define UTILS_H_
 
@@ -92,6 +94,30 @@ int timespecDiff(struct timespec tempoInizio, struct timespec tempoFine, struct 
     } else {
         return 0;
     }
+}
+
+
+/**
+ * @brief Compara 2 stringhe, indifferentemente dal fatto che abbiano una nuova riga o un NULL alla fine.
+ * 
+ * @param s1    Stringa 1
+ * @param s2    Stringa 2
+ * 
+ * @returns 0 se sono uguali, 1 altrimenti
+**/
+int strcmpnl(const char *s1, const char *s2) {
+    char s1c;
+    char s2c;
+    
+    do {
+        s1c = *(s1++);
+        s2c = *(s2++);
+        if (s1c == '\n') s1c = 0;
+        if (s2c == '\n') s2c = 0;
+        if (s1c != s2c) return 1;
+    } while (s1c);
+
+    return 0;
 }
 
 #endif /* UTILS_H */

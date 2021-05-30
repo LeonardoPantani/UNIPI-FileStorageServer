@@ -1,7 +1,9 @@
 /.vscode
-/server
-workspace.code-workspace
-/flushati
-/salvati
 /a
+/flushati
+/output
+/salvati
+server
 client
+workspace.code-workspace
+Specifiche_Progetto.pdf

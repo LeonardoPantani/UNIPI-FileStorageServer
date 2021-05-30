@@ -1,6 +1,8 @@
-/*
- * Author : Pierre-Henri Symoneaux
- */
+/**
+ * @file    hash_table.c
+ * @brief   Contiene l'implementazione della hash table.
+ * @author	Pierre-Henri Symoneaux
+**/
 
 #include <string.h>
 #include "hash_table.h"
@@ -103,7 +105,7 @@ void* ht_remove(hashtable_t* hasht, char* key) {
 				prev->next = e->next;
 			else
 				hasht->table[h] = e->next;
-			free(e->data);
+			if(e->data_length != 0) free(e->data);
 			free(e->mutex);
 			deleteQueue(e->codaRichiedentiLock);
 			free(e->rilascioLock);

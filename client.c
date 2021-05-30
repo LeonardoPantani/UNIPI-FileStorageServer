@@ -1,3 +1,9 @@
+/**
+ * @file    client.c
+ * @brief   Contiene l'implementazione del client, tra cui la lettura dei parametri in ingresso ed esecuzione delle richieste verso il server.
+ * @author  Leonardo Pantani
+**/
+
 #define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
 #include <string.h>
@@ -465,7 +471,7 @@ int main(int argc, char* argv[]) {
 
         if((socketConnection = openConnection(socketPath, 4999, tempoMassimo)) == -1) {
             // connessione fallita
-            pe("Errore durante la connessione");
+            pe("CLIENT> Errore durante la connessione");
             free(socketPath);
             return -1;
         }
@@ -488,24 +494,24 @@ int main(int argc, char* argv[]) {
         Message* msg = calloc(4, sizeof(Message));
         checkStop(msg == NULL, "malloc msg");
         // fine variabile per contenere richieste
-        setMessage(msg, AC_UNKNOWN, 0, NULL, NULL, 0);
+        setMessage(msg, ANS_UNKNOWN, 0, NULL, NULL, 0);
 
 
         // attendo il messaggio di benvenuto dal server
         int esito = readMessage(socketConnection, msg);
         if(esito == 0) {
-            if(msg->action == AC_WELCOME) {
+            if(msg->action == ANS_WELCOME) {
                 ppf(CLR_SUCCESS); printf("CLIENT> Ricevuto WELCOME dal server: %s\n", msg->data); ppff();
 
                 char* testo_msg = "Grazie, ci sono";
-                setMessage(msg, AC_HELLO, 0, NULL, testo_msg, strlen(testo_msg));
+                setMessage(msg, ANS_HELLO, 0, NULL, testo_msg, strlen(testo_msg));
 
                 ppf(CLR_INFO); printf("CLIENT> Rispondo al WELCOME con: %s\n", testo_msg);
 
                 checkStop(sendMessage(socketConnection, msg) != 0, "msg hello al server iniziale");
 
                 ppf(CLR_SUCCESS); printf("CLIENT> Inviato HELLO al server con successo!\n"); ppff();
-            } else if(msg->action == AC_MAXCONNECTIONSREACHED) {
+            } else if(msg->action == ANS_MAX_CONN_REACHED) {
                 ppf(CLR_ERROR); printf("CLIENT> Il server ha raggiunto il limite massimo di connessioni.\n"); ppff();
 
                 free(msg->path);
@@ -514,7 +520,7 @@ int main(int argc, char* argv[]) {
         }
 
         // se l'ultima richiesta è stata una HELLO (inviata da me), allora posso iniziare ad eseguire le richieste
-        if(msg->action == AC_HELLO) {
+        if(msg->action == ANS_HELLO) {
             // eseguo tutte le azioni richieste
             for(int i = 0; i < actions; i++) {
                 if(executeAction(listaAzioni[i], listaParametri[i]) == 0) {
@@ -525,8 +531,7 @@ int main(int argc, char* argv[]) {
 					t.tv_nsec = (timeoutRequests%1000)*1000000000;
 					nanosleep(&t, NULL);
                 } else {
-                    ppf(CLR_ERROR); printf("CLIENT> Operazione n°%d fallita. Esco!\n", listaAzioni[i]); ppff();
-                    break;
+                    ppf(CLR_ERROR); printf("CLIENT> Operazione n°%d fallita.\n", listaAzioni[i]); ppff();
                 }
             }
         }

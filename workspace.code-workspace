@@ -27,7 +27,9 @@
 			"utility": "c",
 			"socket.h": "c",
 			"statistics.h": "c",
-			"cstdio": "c"
+			"cstdio": "c",
+			"errno.h": "c",
+			"signal.h": "c"
 		}
 	}
 }

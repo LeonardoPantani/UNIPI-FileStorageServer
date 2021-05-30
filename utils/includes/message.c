@@ -1,6 +1,7 @@
 /**
  * @file    message.c
  * @brief   Contiene l'implementazione dei tipi dei messaggi e alcune funzioni utili per facilitare l'utilizzo.
+ * @author  Leonardo Pantani
 **/
 
 #include "message.h"
