@@ -9,8 +9,9 @@
 
 static unsigned int ht_calc_hash(char* key) {
 	unsigned int h = 5381;
-	while(*(key++))
-		h = ((h << 5) + h) + (*key);
+	int c;
+	while((c = *key++) != 0)
+		h = ((h << 5) + h) + c;
 	return h;
 }
 
@@ -39,16 +40,17 @@ void* ht_put(hashtable_t* hasht, char* key, void* data, size_t data_length, int 
 
 	while(e != NULL)
 	{
-		if(strcmp(e->key, key) == 0) // se ho già trovato una chiave uguale
-		{
-			void* ret = e->data;
+		if(strcmp(e->key, key) == 0) { // se ho già trovato una chiave uguale
 			e->data_length = data_length;
-			e->path = key;
-			e->data = data;
+			strcpy(e->path, key);
+			if(data_length != 0)
+				memcpy(e->data, data, data_length);
+			else
+				e->data = NULL;
             e->lock = lock;
             e->updatedDate = updatedDate;
 			pthread_mutex_init(e->mutex, NULL);
-			return ret;
+			return e->data;
 		}
 		e = e->next;
 	}
@@ -58,8 +60,13 @@ void* ht_put(hashtable_t* hasht, char* key, void* data, size_t data_length, int 
 	if((e = malloc(sizeof(hash_elem_t)+strlen(key)+1)) == NULL)
 		return HT_ERROR;
 	strcpy(e->key, key);
-	e->path = key;
-	e->data = data;
+
+	e->path = calloc(4, PATH_MAX);
+	strcpy(e->path, key);
+	if(data_length != 0)
+		memcpy(e->data, data, data_length);
+	else
+		e->data = NULL;
 	e->data_length = data_length;
 	e->updatedDate = updatedDate;
 	e->codaRichiedentiLock = NULL;
@@ -105,12 +112,11 @@ void* ht_remove(hashtable_t* hasht, char* key) {
 				prev->next = e->next;
 			else
 				hasht->table[h] = e->next;
-			if(e->data_length != 0) free(e->data);
+			free(e->path);
+			free(e->data);
 			free(e->mutex);
 			deleteQueue(e->codaRichiedentiLock);
 			free(e->rilascioLock);
-			free(e);
-			e = NULL;
 			hasht->e_num --;
 			return e;
 		}
@@ -169,19 +175,18 @@ void* ht_iterate_values(hash_elem_it* iterator) {
 }
 
 
-void ht_clear(hashtable_t* hasht, int free_data) {
+void ht_clear(hashtable_t* hasht) {
 	hash_elem_it it = HT_ITERATOR(hasht);
 	char* k = ht_iterate_keys(&it);
-	while(k != NULL)
-	{
-		free_data ? free(ht_remove(hasht, k)) : ht_remove(hasht, k);
+	while(k != NULL) {
+		free(ht_remove(hasht, k));
 		k = ht_iterate_keys(&it);
 	}
 }
 
 
 void ht_destroy(hashtable_t* hasht) {
-	ht_clear(hasht, 0); // Delete and free all.
+	ht_clear(hasht); // Delete and free all.
 	free(hasht->table);
 	free(hasht);
 }

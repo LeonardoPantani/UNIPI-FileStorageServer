@@ -5,11 +5,12 @@
 #
 
 PATH_UNIX_SOCKET = mipiacequestonome
-PATH_OUTPUT = output
+PATH_OUTPUT = output/* salvati/* flushati/*
 
 
 CC = gcc
-CFLAGS += -std=c99 -Wall -pedantic -DDEBUG
+#CFLAGS += -std=c99 -Wall -Wpedantic -Wno-variadic-macros -DDEBUG
+CFLAGS += -g -std=c99 -Wall
 INCLUDES = -I.
 LDFLAGS = -L.
 OPTFLAGS = -O3
@@ -18,30 +19,58 @@ LIBS = -pthread
 TARGETS =	server \
 			client
 
-OBJECTS =	\ #todo
-
-INCLUDE_FILES = \ #todo
-
 .PHONY: all clean cleanall test1 test2 test3
 
 
+%: %.c
+	$(CC) $(CFLAGS) $(INCLUDES) $(OPTFLAGS) -o $@ $< $(LDFLAGS) $(LIBS)
+
+%.o: %.c
+	$(CC) $(CFLAGS) $(INCLUDES) $(OPTFLAGS) $(LDFLAGS) -o $@ $^ $(LIBS)
+
 all: $(TARGETS)
+
 
 #######
 clean:
-	rm -f $(TARGETS)
+	@rm -f $(TARGETS)
 
 cleanall: clean
-	rm -f *.o *~ $(PATH_UNIX_SOCKET) $(PATH_OUTPUT)
+	@rm -f *.o *~ $(PATH_UNIX_SOCKET) $(PATH_OUTPUT)
 
 test1:
-	make cleanall
-	make all
+	@$(MAKE) -s cleanall
+	@$(MAKE) -s all
+	@echo "*********************************************"
+	@echo "*************** AVVIO TEST 1 ****************"
+	@echo "*********************************************"
+	@rm -f valgrind_output
+	@valgrind --leak-check=full ./server -conf test1/config.txt > ./valgrind_output 2>&1 &
+	@bash test1.sh
+	@echo "*********************************************"
+	@echo "************** TEST 1 SUPERATO **************"
+	@echo "*********************************************"
 
 test2:
-	make cleanall
-	make all
+	@$(MAKE) -s cleanall
+	@$(MAKE) -s all
+	@echo "*********************************************"
+	@echo "*************** AVVIO TEST 2 ****************"
+	@echo "*********************************************"
+	@./server -conf test2/config.txt &
+	@bash test2.sh
+	@echo "*********************************************"
+	@echo "************** TEST 2 SUPERATO **************"
+	@echo "*********************************************"
 
 test3:
-	make cleanall
-	make all
+	@$(MAKE) -s cleanall
+	@$(MAKE) -s all
+	@echo "*********************************************"
+	@echo "*************** AVVIO TEST 3 ****************"
+	@echo "*********************************************"
+	@./server -conf test3/config.txt &
+	@./test3.sh
+	@echo "*********************************************"
+	@echo "************** TEST 3 SUPERATO **************"
+	@echo "*********************************************"

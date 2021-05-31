@@ -25,6 +25,11 @@ typedef struct {
     int current_connections;
     int current_bytes_used;
     int current_files_saved;
+
+    int bytes_read;
+    int bytes_written;
+
+    int* workerRequests;
 } Statistics;
 
 #endif /* STATISTICS_H_ */

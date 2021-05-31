@@ -33,7 +33,7 @@ typedef struct hash_elem_t {
 typedef struct {
 	unsigned int capacity;	// Hashtable capacity (in terms of hashed keys)
 	unsigned int e_num;	// Number of element currently stored in the hashtable
-	hash_elem_t** table;	// The table containaing elements
+	hash_elem_t** table;	// The table containing elements
 } hashtable_t;
 
 //Structure used for iterations
@@ -70,8 +70,7 @@ void* ht_put(hashtable_t* hasht, char* key, void* data, size_t data_length, int 
 char* ht_getPath(hashtable_t* hasht, char* key);
 
 
-/* 	Remove data from the hashtable. Return the data removed from the table
-	so that we can free memory if needed */
+/* 	Remove data from the hashtable */
 void* ht_remove(hashtable_t* hasht, char* key);
 
 
@@ -91,9 +90,8 @@ char* ht_iterate_keys(hash_elem_it* iterator);
 void* ht_iterate_values(hash_elem_it* iterator);
 
 
-/* 	Removes all elements stored in the hashtable.
-	if free_data, all stored datas are also freed.*/
-void ht_clear(hashtable_t* hasht, int free_data);
+/* 	Removes all elements stored in the hashtable. */
+void ht_clear(hashtable_t* hasht);
 
 
 /* 	Destroy the hash table, and free memory.

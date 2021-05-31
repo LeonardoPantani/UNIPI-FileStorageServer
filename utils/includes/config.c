@@ -16,12 +16,11 @@
 extern FILE* fileLog;
 extern pthread_mutex_t mutexFileLog;
 
-int loadConfig(Config* conf) {
+int loadConfig(Config* conf, char* posConfig) {
     int v = 0, temp;
 
-	FILE *fp = fopen(CONFIG_PATH, "r");
+	FILE *fp = fopen(posConfig, "r");
     if(fp == NULL) {
-        errno = EXIT_FAILURE;
         return ERR_FILEOPENING;
     }
 	
@@ -38,7 +37,7 @@ int loadConfig(Config* conf) {
                 if(variabile != NULL) {
                     valore = strtok_r(NULL, "=", &saveptr);
                     if(valore != NULL) {
-                        valore[strlen(valore)] = '\0';
+                        valore[strlen(valore)-1] = '\0';
                         #ifdef DEBUG
                             ppf(CLR_INFO); printSave(">> %s: %s", variabile, valore); ppff();
                         #endif
@@ -78,6 +77,12 @@ int loadConfig(Config* conf) {
                         } else if(strcmpnl(variabile, "SOCKET_FILE_NAME") == 0) {
                             strcpy((*conf).socket_file_name, valore);
                             v++;
+                        } else if(strcmpnl(variabile, "LOG_FILE_NAME") == 0) {
+                            strcpy((*conf).log_file_name, valore);
+                            v++;
+                        } else if(strcmpnl(variabile, "STATS_FILE_NAME") == 0) {
+                            strcpy((*conf).stats_file_name, valore);
+                            v++;
                         }
                     } else {
                         return ERR_EMPTYVALUE; // value after = is empty
@@ -98,36 +103,39 @@ int loadConfig(Config* conf) {
     }
 }
 
-void configLoader(Config* conf) {
-    ppf(CLR_INFO); printSave("> Caricamento file di config"); ppff();
-    switch(loadConfig(conf)) {
+void configLoader(Config* conf, char* posConfig) {
+    ppf(CLR_INFO); printSave("> Caricamento file di config..."); ppff();
+
+    checkStop(posConfig == NULL, "posizione file di config inesistente");
+
+    switch(loadConfig(conf, posConfig)) {
         case ERR_FILEOPENING:
-            ppf(CLR_ERROR); printSave("Errore durante l'apertura del file di config."); ppff();
+            ppf(CLR_ERROR); pe("> Errore durante l'apertura del file di config"); ppff();
             exit(EXIT_FAILURE);
         break;
 
         case ERR_INVALIDKEY:
-            ppf(CLR_ERROR); printSave("Chiave del server non valida."); ppff();
+            ppf(CLR_ERROR); printSave("> Chiave del server non valida."); ppff();
             exit(EXIT_FAILURE);
         break;
 
         case ERR_NEGVALUE:
-            ppf(CLR_ERROR); printSave("Una o più variabili hanno un valore negativo o pari a 0."); ppff();
+            ppf(CLR_ERROR); printSave("> Una o più variabili hanno un valore negativo o pari a 0."); ppff();
             exit(EXIT_FAILURE);
         break;
 
         case ERR_EMPTYVALUE:
-            ppf(CLR_ERROR); printSave("Una o più variabili hanno un valore vuoto."); ppff();
+            ppf(CLR_ERROR); printSave("> Una o più variabili hanno un valore vuoto."); ppff();
             exit(EXIT_FAILURE);
         break;
 
         case ERR_UNSETVALUES:
-            ppf(CLR_ERROR); printSave("Una o più variabili non sono presenti nel file di config."); ppff();
+            ppf(CLR_ERROR); printSave("> Una o più variabili non sono presenti nel file di config."); ppff();
             exit(EXIT_FAILURE);
         break;
 
         case ERR_ILLEGAL:
-            ppf(CLR_ERROR); printSave("Testo illegale nel file di config."); ppff();
+            ppf(CLR_ERROR); printSave("> Testo illegale nel file di config."); ppff();
             exit(EXIT_FAILURE);
         break;
     }

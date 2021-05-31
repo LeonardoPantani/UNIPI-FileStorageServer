@@ -74,7 +74,7 @@ static int sendFilesList(char* nomeCartella, int numFiles, int completed, int to
                         if(writeFile(path, ejectedFileFolder) == 0) { // se il file non esiste allora lo blocco e ci scrivo sopra
                             completed++;
                         }
-                        unlockFile(path);
+                        //unlockFile(path);
                     } else if(openFile(path, O_LOCK) == 0) { // se il file esiste già allora faccio la lock e appendo
                         FILE* filePointer;
                         filePointer = fopen(path, "rb");
@@ -86,9 +86,10 @@ static int sendFilesList(char* nomeCartella, int numFiles, int completed, int to
                             if(appendToFile(path, data, proprieta.st_size, ejectedFileFolder) == 0) { // allora faccio la append
                                 completed++;
                             }
-                            unlockFile(path);
+                            //unlockFile(path);
                         }
 
+                        fclose(filePointer);
                         free(data);
                     } else { // c'è un problema relativo al file o qualcos'altro
                         // NULLA
@@ -168,7 +169,7 @@ static int executeAction(ActionType ac, char* parameters) {
                             if(writeFile(nomeFile, ejectedFileFolder) == 0) { // se il file non esiste allora lo blocco e ci scrivo sopra
                                 completed++;
                             }
-                            unlockFile(nomeFile);
+                            //unlockFile(nomeFile);
                         } else if(openFile(nomeFile, O_LOCK) == 0) { // se il file esiste già allora faccio la lock e appendo
                             FILE* filePointer;
                             filePointer = fopen(nomeFile, "rb");
@@ -180,9 +181,10 @@ static int executeAction(ActionType ac, char* parameters) {
                                 if(appendToFile(nomeFile, data, proprieta.st_size, ejectedFileFolder) == 0) { // allora faccio la append
                                     completed++;
                                 }
-                                unlockFile(nomeFile);
+                                //unlockFile(nomeFile);
                             }
 
+                            fclose(filePointer);
                             free(data);
                         } else { // c'è un problema relativo al file o qualcos'altro
                             // NULLA
@@ -225,11 +227,11 @@ static int executeAction(ActionType ac, char* parameters) {
                         FILE* filePointer;
                         char percorso[PATH_MAX];
 
-                        memset(percorso, 0, strlen(percorso));
+                        memset(percorso, 0, PATH_MAX);
 
                         strcpy(percorso, savedFileFolder);
                                         
-                        if(percorso[strlen(percorso) - 1] != '/') {
+                        if(percorso[PATH_MAX - 1] != '/') {
                             strcat(percorso, "/");
                         }
                         strcat(percorso, basename(nomeFile));
@@ -239,7 +241,8 @@ static int executeAction(ActionType ac, char* parameters) {
 
                         fwrite(puntatoreFile, 1, dimensioneFile, filePointer);
                         ppf(CLR_INFO); printf("CLIENT> File '%s' salvato in '%s'\n", nomeFile, percorso); ppff();
-                                        
+
+                        free(puntatoreFile);   
                         fclose(filePointer);
                     }
                 } else {
@@ -311,7 +314,7 @@ static int executeAction(ActionType ac, char* parameters) {
                 if(unlockFile(nomeFile) != 0) {
                     return -1; // appena un file non viene letto do operazione fallita
                 }
-                
+                closeFile(nomeFile);
                 nomeFile = strtok_r(NULL, ",", &savePointer);
             }
 
@@ -496,12 +499,13 @@ int main(int argc, char* argv[]) {
         // fine variabile per contenere richieste
         setMessage(msg, ANS_UNKNOWN, 0, NULL, NULL, 0);
 
-
         // attendo il messaggio di benvenuto dal server
         int esito = readMessage(socketConnection, msg);
+        ActionType ac = msg->action;
         if(esito == 0) {
-            if(msg->action == ANS_WELCOME) {
+            if(ac == ANS_WELCOME) {
                 ppf(CLR_SUCCESS); printf("CLIENT> Ricevuto WELCOME dal server: %s\n", msg->data); ppff();
+                free(msg->data);
 
                 char* testo_msg = "Grazie, ci sono";
                 setMessage(msg, ANS_HELLO, 0, NULL, testo_msg, strlen(testo_msg));
@@ -511,16 +515,16 @@ int main(int argc, char* argv[]) {
                 checkStop(sendMessage(socketConnection, msg) != 0, "msg hello al server iniziale");
 
                 ppf(CLR_SUCCESS); printf("CLIENT> Inviato HELLO al server con successo!\n"); ppff();
-            } else if(msg->action == ANS_MAX_CONN_REACHED) {
+            } else if(ac == ANS_MAX_CONN_REACHED) {
                 ppf(CLR_ERROR); printf("CLIENT> Il server ha raggiunto il limite massimo di connessioni.\n"); ppff();
-
-                free(msg->path);
-                free(msg->data);
             }
         }
 
-        // se l'ultima richiesta è stata una HELLO (inviata da me), allora posso iniziare ad eseguire le richieste
-        if(msg->action == ANS_HELLO) {
+        
+        free(msg);
+
+        // se l'ultima richiesta è stata una WELCOME allora inizio ad eseguire le richieste
+        if(ac == ANS_WELCOME) {
             // eseguo tutte le azioni richieste
             for(int i = 0; i < actions; i++) {
                 if(executeAction(listaAzioni[i], listaParametri[i]) == 0) {
@@ -535,8 +539,6 @@ int main(int argc, char* argv[]) {
                 }
             }
         }
-
-        free(msg);
 
 
         // finite le azioni richieste, chiudo la connessione

@@ -5,25 +5,25 @@
 !SERVER_KEY=efhiauefrwhwafghaw2131guys
 
 # Numero connessioni massime
-MAX_CONNECTIONS=5
+MAX_CONNECTIONS=100
 
 # Numero massimo di workers
-MAX_WORKERS=10
+MAX_WORKERS=8
 
 # Quantità di memoria allocata massima
-MAX_MEMORY_SIZE=10000000
+MAX_MEMORY_SIZE=32000000
 
 # Quantità di file massima
-MAX_FILES=5
+MAX_FILES=100
 
 # Nome del socket file
 SOCKET_FILE_NAME=mipiacequestonome
 
 # Posizione file di log
-LOG_FILE_NAME=output/server_log.txt
+LOG_FILE_NAME=test3/server_log.txt
 
 # Posizione file delle statistiche
-STATS_FILE_NAME=output/stats.txt
+STATS_FILE_NAME=test3/stats.txt
 # ------------------------------------------------------- #
 # ----------------- FINE CONFIGURAZIONE ----------------- #
 # ------------------------------------------------------- #
