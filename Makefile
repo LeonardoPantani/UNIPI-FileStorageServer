@@ -5,7 +5,7 @@
 #
 
 PATH_UNIX_SOCKET = mipiacequestonome
-PATH_OUTPUT = output/* salvati/* flushati/*
+PATH_OUTPUT = client_log.txt valgrind_output.txt output/* salvati/* flushati/* test1/flushati/* test1/salvati/* test1/output/* test2/flushati/* test2/salvati/* test2/output/* test3/flushati/* test3/salvati/* test3/output/*
 
 
 CC = gcc
@@ -44,8 +44,8 @@ test1:
 	@echo "*********************************************"
 	@echo "*************** AVVIO TEST 1 ****************"
 	@echo "*********************************************"
-	@rm -f valgrind_output
-	@valgrind --leak-check=full ./server -conf test1/config.txt > ./valgrind_output 2>&1 &
+	@rm -f valgrind_output.txt
+	@valgrind --leak-check=full ./server -conf test1/config.txt > ./valgrind_output.txt 2>&1 &
 	@bash test1.sh
 	@echo "*********************************************"
 	@echo "************** TEST 1 SUPERATO **************"

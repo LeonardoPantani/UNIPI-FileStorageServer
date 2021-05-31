@@ -32,8 +32,11 @@ char ejectedFileFolder[PATH_MAX]; // -D percorso dove salvare file espulsi dal s
 
 char savedFileFolder[PATH_MAX]; // -d percorso dove salvare i file letti dal server (serve r|R)
 
-pthread_mutex_t mutexChiusura = PTHREAD_MUTEX_INITIALIZER;
 int chiusuraForte = FALSE;
+pthread_mutex_t mutexChiusura = PTHREAD_MUTEX_INITIALIZER;
+
+FILE* fileLog;
+pthread_mutex_t mutexFileLog = PTHREAD_MUTEX_INITIALIZER;
 
 void help(void) {
     ppf(CLR_HIGHLIGHT); printf("Utilizzo:\n"); ppff();
@@ -118,11 +121,11 @@ static int executeAction(ActionType ac, char* parameters) {
             
             nomeCartella = strtok_r(parameters, ",", &savePointer);
             if((cartella = opendir(nomeCartella)) == NULL) {
-                ppf(CLR_ERROR); printf("CLIENT> Cartella specificata '%s' inesistente.\n", nomeCartella); ppff();
+                ppf(CLR_ERROR); printSave("CLIENT> Cartella specificata '%s' inesistente.", nomeCartella); ppff();
                 free(cartella);
                 return -1;
             } else {
-                ppf(CLR_HIGHLIGHT); printf("CLIENT> Cartella per la write impostata su '%s'", nomeCartella);
+                ppf(CLR_HIGHLIGHT); printf("CLIENT> Cartella per la write impostata su '%s'", nomeCartella); fflush(stdout);
                 free(cartella);
             }
             temp = strtok_r(NULL, ",", &savePointer);
@@ -138,12 +141,13 @@ static int executeAction(ActionType ac, char* parameters) {
                     } else {
                         printf(" | numero file: %d\n", numFiles); ppff();
                     }
+                    fflush(stdout);
                 } else {
-                    ppf(CLR_ERROR); printf("CLIENT> Specificato sottoargomento 'n' ma non il suo valore.\n"); ppff();
+                    ppf(CLR_ERROR); printSave("CLIENT> Specificato sottoargomento 'n' ma non il suo valore."); ppff();
                     return -1;
                 }
             } else {
-                printf(" | numero file: TUTTI\n"); ppff();
+                printf(" | numero file: TUTTI\n"); ppff(); fflush(stdout);
             }
 
             return sendFilesList(nomeCartella, numFiles, 0, 0); // restituisce la differenza tra file totali e file inviati con successo (se 0 ok, !=0 non tutti inviati)
@@ -190,10 +194,10 @@ static int executeAction(ActionType ac, char* parameters) {
                             // NULLA
                         }
                     } else {
-                        ppf(CLR_ERROR); printf("CLIENT> '%s' è una cartella.\n", nomeFile); ppff();
+                        ppf(CLR_ERROR); printSave("CLIENT> '%s' è una cartella.", nomeFile); ppff();
                     }
                 } else {
-                    ppf(CLR_ERROR); printf("CLIENT> Il file '%s' non esiste o è corrotto.\n", nomeFile); ppff();
+                    ppf(CLR_ERROR); printSave("CLIENT> Il file '%s' non esiste o è corrotto.", nomeFile); ppff();
                 }
 
                 nomeFile = strtok_r(NULL, ",", &savePointer);
@@ -216,7 +220,7 @@ static int executeAction(ActionType ac, char* parameters) {
             int saveFiles = TRUE;
 
             if(strcmp(savedFileFolder, "#") == 0) {
-                ppf(CLR_WARNING); printf("CLIENT> I file non saranno salvati perché non hai specificato nessuna cartella di destinazione con -d.\n"); ppff();
+                ppf(CLR_WARNING); printSave("CLIENT> I file non saranno salvati perché non hai specificato nessuna cartella di destinazione con -d."); ppff();
                 saveFiles = FALSE;
             }
             
@@ -240,7 +244,7 @@ static int executeAction(ActionType ac, char* parameters) {
                         if(filePointer == NULL) { pe("File non aperto!!"); }
 
                         fwrite(puntatoreFile, 1, dimensioneFile, filePointer);
-                        ppf(CLR_INFO); printf("CLIENT> File '%s' salvato in '%s'\n", nomeFile, percorso); ppff();
+                        ppf(CLR_INFO); printSave("CLIENT> File '%s' salvato in '%s'", nomeFile, percorso); ppff();
 
                         free(puntatoreFile);   
                         fclose(filePointer);
@@ -339,6 +343,10 @@ int main(int argc, char* argv[]) {
         DIR* cartella;
         strcpy(ejectedFileFolder, "#"); // imposta il valore iniziale su #
         strcpy(savedFileFolder, "#"); // imposta il valore iniziale su #
+
+        // INIZIALIZZO FILE LOG
+        fileLog = fopen("client_log.txt", "w+");
+        checkStop(fileLog == NULL, "creazione file log");
 
 		while ((opt = getopt(argc,argv, ":hf:w:W:D:r:R:d:t:l:u:c:p")) != -1) {
 			switch(opt) {
@@ -446,12 +454,12 @@ int main(int argc, char* argv[]) {
                 }
 
 				case ':': { // manca un argomento
-					ppf(CLR_ERROR); printf("Argomento %c non valido\n", optopt); ppff();
+					ppf(CLR_ERROR); printf("CLIENT> Argomento %c non valido\n", optopt); ppff();
 				    break;
                 }
 
 				case '?': { // opzione non valida
-					ppf(CLR_ERROR); printf("Argomento %c non riconosciuto\n", optopt); ppff();
+					ppf(CLR_ERROR); printf("CLIENT> Argomento %c non riconosciuto\n", optopt); ppff();
 				    break;
                 }
 
@@ -504,17 +512,17 @@ int main(int argc, char* argv[]) {
         ActionType ac = msg->action;
         if(esito == 0) {
             if(ac == ANS_WELCOME) {
-                ppf(CLR_SUCCESS); printf("CLIENT> Ricevuto WELCOME dal server: %s\n", msg->data); ppff();
+                ppf(CLR_SUCCESS); printSave("CLIENT> Ricevuto WELCOME dal server: %s", msg->data); ppff();
                 free(msg->data);
 
                 char* testo_msg = "Grazie, ci sono";
                 setMessage(msg, ANS_HELLO, 0, NULL, testo_msg, strlen(testo_msg));
 
-                ppf(CLR_INFO); printf("CLIENT> Rispondo al WELCOME con: %s\n", testo_msg);
+                ppf(CLR_INFO); printSave("CLIENT> Rispondo al WELCOME con: %s", testo_msg);
 
                 checkStop(sendMessage(socketConnection, msg) != 0, "msg hello al server iniziale");
 
-                ppf(CLR_SUCCESS); printf("CLIENT> Inviato HELLO al server con successo!\n"); ppff();
+                ppf(CLR_SUCCESS); printSave("CLIENT> Inviato HELLO al server con successo!"); ppff();
             } else if(ac == ANS_MAX_CONN_REACHED) {
                 ppf(CLR_ERROR); printf("CLIENT> Il server ha raggiunto il limite massimo di connessioni.\n"); ppff();
             }
@@ -535,7 +543,7 @@ int main(int argc, char* argv[]) {
 					t.tv_nsec = (timeoutRequests%1000)*1000000000;
 					nanosleep(&t, NULL);
                 } else {
-                    ppf(CLR_ERROR); printf("CLIENT> Operazione n°%d fallita.\n", listaAzioni[i]); ppff();
+                    ppf(CLR_ERROR); printf("CLIENT> Operazione n°%d fallita. Motivo: %s (codice errore %d)\n", listaAzioni[i], strerror(errno), errno); ppff();
                 }
             }
         }
@@ -545,14 +553,14 @@ int main(int argc, char* argv[]) {
 		if(closeConnection(socketPath) == 0) {
             ppf(CLR_INFO); printf("CLIENT> Connessione terminata con successo.\n"); ppff();
         } else {
-            ppf(CLR_ERROR); printf("CLIENT> Connessione non terminata!!\n"); ppff();
+            ppf(CLR_ERROR); printf("CLIENT> Connessione non terminata.\n"); ppff();
         }
 
         free(socketPath);
 
 		return 0;
 	} else {
-		ppf(CLR_ERROR); printf("Fornisci almeno un argomento. Usa -h se non sei sicuro.\n"); ppff();
+		ppf(CLR_ERROR); printf("CLIENT> Fornisci almeno un argomento. Usa -h se non sei sicuro.\n"); ppff();
 		return 0;
 	}
     return 0;

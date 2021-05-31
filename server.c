@@ -309,11 +309,6 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
                 ppf(CLR_ERROR); printSave("GC %d > Il file '%s' non esiste. Impossibile eliminarlo.", numero, msg->path); ppff();
             } else {
                 if(valore->lock == -1 || valore->lock == socketConnection) { // puoi cancellare file solo se non c'ha lock oppure se c'è ed è fatto dallo stesso client
-                    free(ht_remove(ht, msg->path));
-                    setMessage(risposta, ANS_OK, 0, NULL, NULL, 0);
-                    ppf(CLR_SUCCESS); printSave("GC %d > File '%s' eliminato.", numero, msg->path); ppff();
-
-
                     // --- Aggiornamento statistiche (file_salvati-- | dati_usati-- | replace_applicati++ | n_delete++)
                     locka(mutexStatistiche);
                     stats.current_files_saved--;
@@ -321,6 +316,10 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
                     stats.n_replace_applied++;
                     stats.n_delete++;
                     unlocka(mutexStatistiche);
+                    
+                    free(ht_remove(ht, msg->path));
+                    setMessage(risposta, ANS_OK, 0, NULL, NULL, 0);
+                    ppf(CLR_SUCCESS); printSave("GC %d > File '%s' eliminato.", numero, msg->path); ppff();
                 } else {
                     setMessage(risposta, ANS_NO_PERMISSION, 0, NULL, NULL, 0);
                     ppf(CLR_WARNING); printSave("GC %d > Il file '%s' non appartiene al client che ne ha richiesto l'eliminazione.", numero, msg->path); ppff();
@@ -418,7 +417,7 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
                         checkStop(pthread_cond_init(el->rilascioLock, NULL), "inizializzazione cond rilasciolock REQ_LOCK");
                     }
 
-                    printSave("GC %d > In attesa di acquisire la lock dell'oggetto!", numero);
+                    printSave("GC %d > In attesa di acquisire la lock dell'oggetto...", numero);
 
                     while(TRUE) {
                         checkStop(pthread_cond_wait(el->rilascioLock, el->mutex) != 0, "attesa rilascio lock oggetto");
@@ -426,10 +425,12 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
 
                         el = ht_getElement(ht, msg->path);
 
+                        printf("sono qui\n"); fflush(stdout);
                         if(el == NULL) { // quel file non esiste più
                             setMessage(risposta, ANS_FILE_NOT_EXISTS, 0, NULL, NULL, 0);
                             break;
                         }
+                        printf("sono qua\n"); fflush(stdout);
 
                         if(el->lock == socketConnection) { // ho ottenuto il lock
                             setMessage(risposta, ANS_OK, 0, NULL, NULL, 0);
@@ -717,25 +718,25 @@ void *attesaSegnali(void* statFile) {
         }
 
         if(segnale == SIGUSR1) {
-            ppf(CLR_WARNING); printSave("------- LISTA ELEMENTI -------"); ppff();
+            ppf(CLR_WARNING); printf("------- LISTA ELEMENTI -------\n"); ppff();
             hash_elem_it it2 = HT_ITERATOR(ht);
             char* k = ht_iterate_keys(&it2);
             while(k != NULL) {
                 hash_elem_t* el = ht_getElement(ht, k);
-                printSave("CHIAVE %s | PATH: %s | LOCK: %d | DATA AGGIORNAMENTO: %ld", k, el->path, el->lock, el->updatedDate);
+                printf("CHIAVE %s | PATH: %s | LOCK: %d | DATA AGGIORNAMENTO: %ld\n", k, el->path, el->lock, el->updatedDate);
                 fflush(stdout);
                 k = ht_iterate_keys(&it2);
             }
-            ppf(CLR_WARNING); printSave("------ FINE LISTA ELEMENTI ------"); ppff();
+            ppf(CLR_WARNING); printf("------ FINE LISTA ELEMENTI ------\n"); ppff();
         }
 
         if(segnale == SIGUSR2) {
-            ppf(CLR_HIGHLIGHT); printSave("GS   > Pulizia della tabella in corso."); ppff();
             ht_destroy(ht);
 
             // creo tabella hash (salva i file)
             ht = ht_create(config.max_files);
             checkStop(ht == NULL, "creazione tabella hash");
+            ppf(CLR_HIGHLIGHT); printf("GS   > Tabella ripulita!\n"); ppff();
         }
     }
 
@@ -889,6 +890,5 @@ int main(int argc, char* argv[]) {
     free(mutexHT);
     ht_destroy(ht);
     fclose(fileLog);
-
     return 0;
 }

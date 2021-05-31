@@ -19,12 +19,10 @@
 #define checkM1(condizione, messaggio) if(condizione) { fprintf(stderr, "Errore %s (codice %d) | File %s Riga %d (%s)\n", strerror(errno), errno, __FILE__, __LINE__, messaggio); fflush(stderr); return -1; }
 
 #ifdef DEBUG
-    #define stampaDebug(testo) if(DEBUG) { fprintf(stderr, "%s\n", testo); fflush(stderr); } else { }
+    #define printSave(f, ...) fprintf(stdout, f, ##__VA_ARGS__); fprintf(stdout, "\n"); fflush(stdout); if(fileLog != NULL) { locka(mutexFileLog); fprintf(fileLog, f, ##__VA_ARGS__); fprintf(fileLog, "\n"); fflush(fileLog); unlocka(mutexFileLog); }
 #else
-    #define stampaDebug(testo) {}
+    #define printSave(f, ...) if(fileLog != NULL) { locka(mutexFileLog); fprintf(fileLog, f, ##__VA_ARGS__); fprintf(fileLog, "\n"); fflush(fileLog); unlocka(mutexFileLog); }
 #endif
-
-#define printSave(f, ...) do { fprintf(stdout, f, ##__VA_ARGS__); fprintf(stdout, "\n"); fflush(stdout); if(fileLog != NULL) { locka(mutexFileLog); fprintf(fileLog, f, ##__VA_ARGS__); fprintf(fileLog, "\n"); fflush(fileLog); unlocka(mutexFileLog); } } while(0);
 
 #define locka(mutex) if(pthread_mutex_lock(&mutex) != 0) { fprintf(stderr, "Lock semaforo fallita | File %s Riga %d\n", __FILE__, __LINE__); exit(EXIT_FAILURE); }
 #define unlocka(mutex) if(pthread_mutex_unlock(&mutex) != 0) { fprintf(stderr, "Unlock semaforo fallita | File %s Riga %d\n", __FILE__, __LINE__); exit(EXIT_FAILURE); }

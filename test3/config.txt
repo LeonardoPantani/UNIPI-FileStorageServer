@@ -20,10 +20,10 @@ MAX_FILES=100
 SOCKET_FILE_NAME=mipiacequestonome
 
 # Posizione file di log
-LOG_FILE_NAME=test3/server_log.txt
+LOG_FILE_NAME=test3/output/server_log.txt
 
 # Posizione file delle statistiche
-STATS_FILE_NAME=test3/stats.txt
+STATS_FILE_NAME=test3/output/stats.txt
 # ------------------------------------------------------- #
 # ----------------- FINE CONFIGURAZIONE ----------------- #
 # ------------------------------------------------------- #
