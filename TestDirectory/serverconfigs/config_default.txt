@@ -1,0 +1,29 @@
+# ------------------------------------------------------ #
+# ----------------- INIZIO CONFIGURAZIONE -------------- #
+# ------------------------------------------------------ #
+# Contiene la chiave del server, una specie di password per avviare il server.
+!SERVER_KEY=efhiauefrwhwafghaw2131guys
+
+# Numero connessioni massime
+MAX_CONNECTIONS=5
+
+# Numero massimo di workers
+MAX_WORKERS=3
+
+# Quantità di memoria allocata massima
+MAX_MEMORY_SIZE=32000000
+
+# Quantità di file massima
+MAX_FILES=10
+
+# Nome del socket file
+SOCKET_FILE_NAME=mipiacequestonome.sk
+
+# Posizione file di log
+LOG_FILE_NAME=TestDirectory/output/Server/server_log.txt
+
+# Posizione file delle statistiche
+STATS_FILE_NAME=TestDirectory/output/Server/stats.txt
+# ------------------------------------------------------- #
+# ----------------- FINE CONFIGURAZIONE ----------------- #
+# ------------------------------------------------------- #
