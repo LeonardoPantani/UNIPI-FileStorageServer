@@ -148,7 +148,7 @@ int openFile(const char* pathname, int flags) { // O_CREATE = 1 | O_LOCK = 2 | O
                                 ppf(CLR_INFO); printSave("OF CLIENT> File remoto '%s' (%d bytes) salvato in '%s'", msg->path, msg->data_length, percorso); ppff();
                                 
                                 fclose(filePointer);
-                                free(msg->path);
+                                //free(msg->path); // FIXME
                                 free(msg->data);
                             }
                         }
@@ -431,7 +431,7 @@ int writeFile(const char* pathname, const char* dirname) {
                                 ppf(CLR_INFO); printSave("WF CLIENT> File remoto '%s' (%d bytes) salvato in '%s'", msg->path, msg->data_length, percorso); ppff();
                                 
                                 fclose(filePointer);
-                                free(msg->path);
+                                // free(msg->path); // FIXME
                                 free(msg->data);
                             }
                         }
@@ -533,7 +533,7 @@ int appendToFile(const char* pathname, void* buf, size_t size, const char* dirna
                                 ppf(CLR_INFO); printSave("AF CLIENT> File remoto '%s' (%d bytes) salvato in '%s'", msg->path, msg->data_length, percorso); ppff();
                                 
                                 fclose(filePointer);
-                                free(msg->path);
+                                // free(msg->path); // FIXME
                                 free(msg->data);
                             }
                         }

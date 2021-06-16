@@ -4,8 +4,8 @@
  * @author  Leonardo Pantani
 **/
 
-#ifndef CLIENT_QUEUE_H_
-#define CLIENT_QUEUE_H_
+#ifndef LIST_H_
+#define LIST_H_
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -18,7 +18,7 @@ typedef struct {
     int *array;
     int maxClients;
     int numClients;
-} ClientQueue;
+} List;
 
 /**
  * @brief Crea una coda di al massimo numClients.
@@ -27,14 +27,14 @@ typedef struct {
  * 
  * @returns Puntatore alla coda creata, NULL in caso di errore
 **/
-ClientQueue* createQueue(int numClients);
+List* createList(int numClients);
 
 /**
  * @brief Elimina una coda di client.
  * 
  * @param coda  La coda su cui eseguire la free
 **/
-void deleteQueue(ClientQueue *coda);
+void deleteList(List *coda);
 
 /**
  * @brief Aggiunge un elemento alla coda.
@@ -44,7 +44,7 @@ void deleteQueue(ClientQueue *coda);
  * 
  * @returns 1 in caso di successo, 0 in caso di fallimento
 **/
-int addToQueue(ClientQueue *coda, int elemento);
+int addToList(List *coda, int elemento);
 
 /**
  * @brief Rimuove il primo elemento dalla coda
@@ -53,6 +53,6 @@ int addToQueue(ClientQueue *coda, int elemento);
  * 
  * @returns 1 in caso di successo, 0 in caso di fallimento
 **/
-int removeFromQueue(ClientQueue *coda);
+int removeFromList(List *coda);
 
-#endif /* CLIENT_QUEUE_H_ */
+#endif /* LIST_H_ */

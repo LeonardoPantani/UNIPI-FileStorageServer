@@ -66,8 +66,7 @@ typedef struct {
     ActionType  action;
     int         flags;
 
-    int         path_length;
-    char*       path;
+    char        path[MAX_PATH_LENGTH];
 
     int         data_length;
     char*       data;

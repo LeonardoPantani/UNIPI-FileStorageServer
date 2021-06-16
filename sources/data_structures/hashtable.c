@@ -60,7 +60,6 @@ void* ht_put(hashtable_t* hasht, char* key, void* data, size_t data_length, int 
 		return HT_ERROR;
 	strcpy(e->key, key);
 
-	e->path = calloc(4, PATH_MAX);
 	strcpy(e->path, key);
 	if(data_length != 0)
 		memcpy(e->data, data, data_length);
@@ -111,10 +110,10 @@ void* ht_remove(hashtable_t* hasht, char* key) {
 				prev->next = e->next;
 			else
 				hasht->table[h] = e->next;
-			free(e->path);
+			// free(e->path); // FIXME
 			free(e->data);
 			free(e->mutex);
-			deleteQueue(e->codaRichiedentiLock);
+			deleteList(e->codaRichiedentiLock);
 			free(e->rilascioLock);
 			hasht->e_num --;
 			return e;

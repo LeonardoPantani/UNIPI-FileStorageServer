@@ -16,6 +16,7 @@
 #include <sys/un.h>
 
 #include "config.h"
+#include "file.h"
 #include "hashtable.h"
 #include "communication.h"
 #include "list.h"
@@ -35,7 +36,7 @@ int nmutex = 0;
 
 pthread_mutex_t mutexChiusura = PTHREAD_MUTEX_INITIALIZER;
 
-ClientQueue *coda_client = NULL;
+List *coda_client = NULL;
 pthread_mutex_t mutexCodaClient = PTHREAD_MUTEX_INITIALIZER;
 
 pthread_cond_t clientInAttesa = PTHREAD_COND_INITIALIZER;
@@ -61,11 +62,11 @@ static int unlockElement(hash_elem_t* el) {
         el->lock = -1;
         ppf(CLR_INFO); printSave("UE   > Lock rilasciata perché non c'era nessun altro in coda a cui darla."); ppff();
     } else { // c'è qualcuno in attesa, gli assegno la lock e lo sveglio
-        el->lock = removeFromQueue(el->codaRichiedentiLock);
+        el->lock = removeFromList(el->codaRichiedentiLock);
         checkM1(el->lock == 0, "rimozione dalla coda richiedenti lock fallita");
         printSave("UE   > Lock rilasciata e assegnata al primo della coda.");
         if(el->codaRichiedentiLock->numClients == 0) { // era l'ultimo della coda
-            deleteQueue(el->codaRichiedentiLock);
+            deleteList(el->codaRichiedentiLock);
             el->codaRichiedentiLock = NULL;
             printSave("UE   > Ho prelevato l'ultimo client in attesa, coda eliminata.");
         }
@@ -89,7 +90,7 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
 
     switch(msg->action) {
         case REQ_OPEN: { // O_CREATE = 1 | O_LOCK = 2 | O_CREATE && O_LOCK = 3
-            if(msg->path_length == 0 || msg->path == NULL) { // controllo che il path non sia vuoto
+            if(msg->path == NULL) { // controllo che il path non sia vuoto
                 setMessage(risposta, ANS_BAD_RQST, 0, NULL, NULL, 0);
                 ppf(CLR_ERROR); printSave("GC %d > Il client %d ha mandato una OPEN con path nullo.\n", numero, socketConnection); ppff();
                 break;
@@ -431,11 +432,11 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
                     unlocka(mutexStatistiche);
                 } else { // il lock è di qualcun altro
                     if(el->codaRichiedentiLock == NULL) {
-                        el->codaRichiedentiLock = createQueue(config.max_workers);
+                        el->codaRichiedentiLock = createList(config.max_workers);
                         checkStop(el->codaRichiedentiLock == NULL, "creazione coda richiedenti lock REQ_LOCK");
                     }
 
-                    checkStop(addToQueue(el->codaRichiedentiLock, socketConnection) == -1, "aggiunta client coda richiedenti lock REQ_LOCK");
+                    checkStop(addToList(el->codaRichiedentiLock, socketConnection) == -1, "aggiunta client coda richiedenti lock REQ_LOCK");
                 
                     if(el->rilascioLock == NULL) {
                         el->rilascioLock = malloc(sizeof(pthread_cond_t));
@@ -549,7 +550,7 @@ void* gestoreConnessione(void* n) {
         // da qui in poi ho trovato un client da servire, ne ottengo il socket dalla coda
         unlocka(mutexChiusura);
 
-        int socketConnection = removeFromQueue(coda_client);
+        int socketConnection = removeFromList(coda_client);
         unlocka(mutexCodaClient);
         checkStop(socketConnection == -1, "rimozione primo elemento dalla coda in attesa fallita");
         printSave("GC %d > Connessione ottenuta dalla coda.", numero);
@@ -602,7 +603,7 @@ void* gestoreConnessione(void* n) {
 
             checkStop(sendMessage(socketConnection, risposta) == -1, "errore invio messaggio");
 
-            free(msg->path);
+            //free(msg->path); // FIXME
 
             free(risposta);
         }
@@ -678,7 +679,7 @@ void *gestorePool(void* socket) {
         unlocka(mutexStatistiche);
 
         locka(mutexCodaClient);
-        checkStop(addToQueue(coda_client, socketConnection) == -1, "impossibile aggiungere alla coda dei client in attesa");
+        checkStop(addToList(coda_client, socketConnection) == -1, "impossibile aggiungere alla coda dei client in attesa");
         unlocka(mutexCodaClient);
         printSave("GP   > Connessione del client messa in coda!");
         checkStop(pthread_cond_signal(&clientInAttesa) != 0, "segnale arrivatoClient");
@@ -800,7 +801,7 @@ int main(int argc, char* argv[]) {
     
 
     // crea coda connessione
-    checkStop((coda_client = createQueue(config.max_connections)) == NULL, "creazione coda connessioni");
+    checkStop((coda_client = createList(config.max_connections)) == NULL, "creazione coda connessioni");
 
     // creo tabella hash (salva i file)
     ht = ht_create(config.max_files);
@@ -885,7 +886,7 @@ int main(int argc, char* argv[]) {
 
     // eliminazione socket, creazione statistiche, chiusura file log, liberazione memoria
     unlink(config.socket_file_name);
-    deleteQueue(coda_client);
+    deleteList(coda_client);
 
 	printStats(config.stats_file_name, config.max_workers);
     printSave("MAIN > Le statistiche sono state salvate nel file '%s'.", config.stats_file_name);

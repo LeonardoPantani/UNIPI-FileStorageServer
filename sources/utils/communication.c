@@ -8,27 +8,24 @@
 #include "communication.h"
 
 void setMessage(Message* msg, ActionType ac, int flags, char* path, void* data, size_t data_length) {
+    memset(msg, 0, sizeof(*msg));
+
     msg->action = ac;
 
     msg->flags = flags;
-    
-    if(path != NULL) {
-        msg->path_length = strlen(path);
-    } else {
-        msg->path_length = 0;
-    }
 
-    msg->path = path;
-
+    if(path != NULL)
+        strcpy(msg->path, path);
 
     msg->data_length = data_length;
+
     msg->data = data;
 }
 
 int sendMessage(int fd, Message* msg) {
     checkM1(msg == NULL, "messaggio nullo");
     
-    // mando sempre tutto il messaggio (le stringhe non saranno valide)
+    // mando sempre tutto il messaggio (il body sarà vuoto)
     int ret = write(fd, msg, sizeof(Message));
     checkM1(ret != sizeof(Message), "scrittura msg iniziale");
 
@@ -36,25 +33,9 @@ int sendMessage(int fd, Message* msg) {
         printf("Send message>> BYTE SCRITTI (iniziali) (azione %d): %d\n", msg->action, ret); fflush(stdout);
     #endif
 
-
-    // scrivo path dinamicamente (se è 0 la lunghezza non trasmetto niente)
-    int remainingBytes = msg->path_length;
-    char* writePointer = msg->path;
-    while(remainingBytes > 0) {
-        ret = write(fd, writePointer, remainingBytes);
-        checkM1(ret == -1, "scrittura fallita path");
-
-        remainingBytes = remainingBytes - ret;
-        writePointer = writePointer + ret;
-
-        #ifdef DEBUG_VERBOSE
-            printf("Send message>> BYTE SCRITTI (path) (azione %d): %d\n", msg->action, ret); fflush(stdout);
-        #endif
-    }
-
     // scrivo data dinamicamente (se è 0 la lunghezza non trasmetto niente)
-    remainingBytes = msg->data_length;
-    writePointer = msg->data;
+    int remainingBytes = msg->data_length;
+    char* writePointer = msg->data;
     while(remainingBytes > 0) {
         ret = write(fd, writePointer, remainingBytes);
         checkM1(ret == -1, "scrittura fallita data");
@@ -86,28 +67,6 @@ int readMessage(int fd, Message* msg) {
     #endif
 
     if(ret == 0) return 1; // connessione chiusa dall'altro partecipante (nessun byte letto)
-
-
-    // leggo path dinamicamente (se è 0 la lunghezza non leggo nulla)
-    if(msg->path_length > 0 && msg->path != NULL) {
-        msg->path = malloc(msg->path_length+1); // +1 così valgrind è contento
-        memset(msg->path, 0, msg->path_length+1); // +1 così valgrind è contento
-        checkM1(msg->path == NULL, "malloc path");
-
-        int remainingBytes = msg->path_length;
-        char* writePointer = msg->path;
-        while(remainingBytes > 0) {
-            ret = read(fd, writePointer, remainingBytes);
-            checkM1(ret == -1, "lettura fallita path");
-
-            remainingBytes = remainingBytes - ret;
-            writePointer = writePointer + ret;
-
-            #ifdef DEBUG_VERBOSE
-                printf("Read message>> BYTE LETTI (path) (azione %d): %d\n", msg->action, ret); fflush(stdout);
-            #endif
-        }
-    }
 
     // leggo data dinamicamente (se è 0 la lunghezza non leggo nulla)
     if(msg->data_length > 0 && msg->data != NULL) {

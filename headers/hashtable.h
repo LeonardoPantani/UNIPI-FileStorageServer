@@ -21,12 +21,12 @@ typedef struct hash_elem_t {
 	size_t data_length; // dimensione dati
     
     int lock; // identifica univocamente un client se ha bloccato il file (la relativa connessione) | -1 altrimenti
-    ClientQueue* codaRichiedentiLock;
+    List* codaRichiedentiLock;
     pthread_cond_t* rilascioLock;
 	pthread_mutex_t* mutex;
     
     unsigned long updatedDate; // data in tempo unix dell'ultima modifica (o creazione)
-	char* path;
+	char path[MAX_PATH_LENGTH];
     char key[]; 	// Key of the stored element
 } hash_elem_t;
 

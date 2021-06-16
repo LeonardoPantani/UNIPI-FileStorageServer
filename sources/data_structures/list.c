@@ -6,9 +6,9 @@
 
 #include "list.h"
 
-ClientQueue* createQueue(int maxClients) {
+List* createList(int maxClients) {
     checkNull(maxClients <= 0, "numero di client massimi minore o uguale a 0");
-    ClientQueue* lista = malloc(sizeof(ClientQueue));
+    List* lista = malloc(sizeof(List));
     checkNull(lista == NULL, "malloc lista client");
 
     lista->array = malloc(maxClients*sizeof(int));
@@ -23,14 +23,14 @@ ClientQueue* createQueue(int maxClients) {
 }
 
 
-void deleteQueue(ClientQueue *coda) {
+void deleteList(List *coda) {
     if(coda != NULL)
         free(coda->array);
     free(coda);
 }
 
 
-int addToQueue(ClientQueue *coda, int elemento) {
+int addToList(List *coda, int elemento) {
     checkM1(coda == NULL, "add ad una coda che non esiste");
     checkM1(coda->numClients >= coda->maxClients, "add ad una coda che ha raggiunto/superato il limite di client massimi");
     coda->numClients++;
@@ -41,7 +41,7 @@ int addToQueue(ClientQueue *coda, int elemento) {
 }
 
 
-int removeFromQueue(ClientQueue *coda) {
+int removeFromList(List *coda) {
     checkM1(coda == NULL, "remove ad una coda che non esiste");
     checkM1(coda->numClients <= 0, "remove ad una coda vuota"); 
 
