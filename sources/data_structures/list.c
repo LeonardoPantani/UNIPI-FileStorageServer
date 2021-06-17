@@ -8,10 +8,10 @@
 
 List* createList(int maxClients) {
     checkNull(maxClients <= 0, "numero di client massimi minore o uguale a 0");
-    List* lista = malloc(sizeof(List));
+    List* lista = cmalloc(sizeof(List));
     checkNull(lista == NULL, "malloc lista client");
 
-    lista->array = malloc(maxClients*sizeof(int));
+    lista->array = cmalloc(maxClients*sizeof(int));
     checkNull(lista->array == NULL, "malloc queue della lista client");
 
     lista->maxClients = maxClients;

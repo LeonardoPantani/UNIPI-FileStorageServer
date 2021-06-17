@@ -38,6 +38,8 @@ typedef struct configurazione {
     char stats_file_name[MAX_PATH_LENGTH];
 } Config;
 
+Config config;
+
 /**
  * @brief Funzione interna.
  * 

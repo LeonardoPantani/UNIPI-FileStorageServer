@@ -14,7 +14,7 @@ MAX_WORKERS=3
 MAX_MEMORY_SIZE=32000000
 
 # Quantità di file massima
-MAX_FILES=10
+MAX_FILES=3
 
 # Nome del socket file
 SOCKET_FILE_NAME=mipiacequestonome.sk

@@ -6,6 +6,18 @@
 
 #include "utils.h"
 
+void* cmalloc(size_t size) {
+    void *ret = malloc(size);
+
+    if(ret == NULL) {
+        perror("Errore allocazione memoria: ");
+        exit(EXIT_FAILURE);
+    }
+
+    memset(ret, 0, size);
+    return ret;
+}
+
 int containsCharacter(char ago, char* pagliaio) {
     for(unsigned int i = 0; i < strlen(pagliaio); i++) {
         if(pagliaio[i] == ago)

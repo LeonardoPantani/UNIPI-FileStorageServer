@@ -8,6 +8,7 @@
 
 int printStats(const char* pathname, int workers) {
     extern Statistics stats;
+    extern Config config;
 
     FILE* filePointer;
 
@@ -15,7 +16,7 @@ int printStats(const char* pathname, int workers) {
 
     checkM1(filePointer == NULL, "impossibile creare file stats");
 
-    char *out = malloc(sizeof(char)*1024);
+    char *out = cmalloc(sizeof(char)*1024);
 
     time_t tempo;
     char buffer[80];
@@ -27,7 +28,7 @@ int printStats(const char* pathname, int workers) {
     if(stats.n_write != 0) avg_bytes_written = (float)stats.bytes_written/stats.n_write;
 
     ppf(CLR_HIGHLIGHT);
-    printf("----- STATISTICHE SERVER [Calcolate in data: %s] -----\nMedia bytes letti: %g\nMedia bytes scritti: %g\nLetture totali: %d\nScritture totali: %d\nLock totali: %d\nAperture&Lock totali: %d\nUnlock totali: %d\nCancellazioni totali: %d\nChiusure totali: %d\n\nDimensione max file totale raggiunta: %f megabytes\nNumero massimo di file raggiunto: %d\nNumero di applicazioni dell'algoritmo di rimpiazzamento: %d\nNumero di connessioni concorrenti totali: %d\n\nLISTA THREAD:\n", buffer, avg_bytes_read, avg_bytes_written, stats.n_read, stats.n_write, stats.n_lock, stats.n_openlock, stats.n_unlock, stats.n_delete, stats.n_close, (stats.max_size_reached/(double)1000000), stats.max_file_number_reached, stats.n_replace_applied, stats.max_concurrent_connections);
+    printf("----- STATISTICHE SERVER [Calcolate in data: %s] -----\nMedia bytes letti: %g\nMedia bytes scritti: %g\nLetture totali: %d\nScritture totali: %d\nLock totali: %d\nAperture&Lock totali: %d\nUnlock totali: %d\nCancellazioni totali: %d\nChiusure totali: %d\n\nDimensione max file totale raggiunta: %f megabytes/%d megabytes\nNumero massimo di file raggiunto: %d/%d\nNumero di applicazioni dell'algoritmo di rimpiazzamento: %d\nNumero di connessioni concorrenti totali: %d\n\nLISTA THREAD:\n", buffer, avg_bytes_read, avg_bytes_written, stats.n_read, stats.n_write, stats.n_lock, stats.n_openlock, stats.n_unlock, stats.n_delete, stats.n_close, (stats.max_size_reached/(double)1000000), config.max_memory_size, stats.max_file_number_reached, config.max_files, stats.n_replace_applied, stats.max_concurrent_connections);
     sprintf(out, "%lu %g %g %d %d %d %d %d %d %d %d %d %d %d\n", (unsigned long)time(NULL), avg_bytes_read, avg_bytes_written, stats.n_read, stats.n_write, stats.n_lock, stats.n_openlock, stats.n_unlock, stats.n_delete, stats.n_close, stats.max_size_reached, stats.max_file_number_reached, stats.n_replace_applied, stats.max_concurrent_connections);
 
     fputs(out, filePointer);

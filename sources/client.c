@@ -62,7 +62,10 @@ static int sendFilesList(char* nomeCartella, int numFiles, int completed, int to
 
         while((entry = readdir(cartella)) != NULL && (numFiles > 0 || numFiles == -1)) {
             char path[PATH_MAX];
-            snprintf(path, sizeof(path), "%s/%s", nomeCartella, entry->d_name);
+            if(nomeCartella[strlen(nomeCartella)-1] != '/')
+                snprintf(path, sizeof(path), "%s/%s", nomeCartella, entry->d_name);
+            else
+                snprintf(path, sizeof(path), "%s%s", nomeCartella, entry->d_name);
             struct stat proprieta;
 
             if(stat(path, &proprieta) == 0) {
@@ -81,7 +84,7 @@ static int sendFilesList(char* nomeCartella, int numFiles, int completed, int to
                         filePointer = fopen(path, "rb");
                         if(filePointer == NULL) { pe("File non aperto!"); }
 
-                        void* data = malloc(sizeof(char)*proprieta.st_size);
+                        void* data = cmalloc(sizeof(char)*proprieta.st_size);
 
                         if(fread(data, 1, proprieta.st_size, filePointer) == proprieta.st_size) { // se la lettura da file avviene correttamente
                             if(appendToFile(path, data, proprieta.st_size, ejectedFileFolder) == 0) { // allora faccio la append
@@ -177,7 +180,7 @@ static int executeAction(ActionType ac, char* parameters) {
                             filePointer = fopen(nomeFile, "rb");
                             if(filePointer == NULL) { pe("File non aperto!!"); }
 
-                            void* data = malloc(sizeof(char)*proprieta.st_size);
+                            void* data = cmalloc(sizeof(char)*proprieta.st_size);
 
                             if(fread(data, 1, proprieta.st_size, filePointer) == proprieta.st_size) { // se la lettura da file avviene correttamente
                                 if(appendToFile(nomeFile, data, proprieta.st_size, ejectedFileFolder) == 0) { // allora faccio la append
@@ -353,7 +356,7 @@ int main(int argc, char* argv[]) {
                 break;
                 
                 case 'f': // imposta il socket a cui connettersi
-                    socketPath = malloc(PATH_MAX);
+                    socketPath = cmalloc(PATH_MAX);
                     memset(socketPath, 0, PATH_MAX);
                     strcpy(socketPath, optarg);
                     if(verbose) { ppf(CLR_HIGHLIGHT); printf("CLIENT> Socket impostato su %s millisecondi.\n", socketPath); ppff(); }
@@ -481,6 +484,7 @@ int main(int argc, char* argv[]) {
         if((socketConnection = openConnection(socketPath, 4999, tempoMassimo)) == -1) {
             // connessione fallita
             pe("CLIENT> Errore durante la connessione");
+            fclose(fileLog);
             free(socketPath);
             return -1;
         }
@@ -494,13 +498,14 @@ int main(int argc, char* argv[]) {
         // ignoro SIGPIPE per evitare di essere terminato da una scrittura su un socket chiuso
         if ((sigaction(SIGPIPE, &s, NULL)) == -1) {
             pe("Errore sigaction");
+            fclose(fileLog);
             free(socketPath);
             return -1;
         }
 
         // === INIZIO COMUNICAZIONE CON SERVER ===
         // creo variabile per contenere richieste
-        Message* msg = calloc(4, sizeof(Message));
+        Message* msg = cmalloc(sizeof(Message));
         checkStop(msg == NULL, "malloc msg");
         // fine variabile per contenere richieste
         setMessage(msg, ANS_UNKNOWN, 0, NULL, NULL, 0);
@@ -554,6 +559,7 @@ int main(int argc, char* argv[]) {
             ppf(CLR_ERROR); printf("CLIENT> Connessione non terminata.\n"); ppff();
         }
 
+        fclose(fileLog);
         free(socketPath);
 
 		return 0;

@@ -30,7 +30,7 @@ client_dependencies = libs/libcomm.so libs/libapi.so
 all: clean server client
 
 server: $(server_dependencies)
-	$(CC) $(INCLUDES) $(CFLAGS) $(THREAD_FLAGS) sources/server.c -o server -DDEBUG -Wl,-rpath,./build/libs -L ./build/libs -lds -lserver -lcomm
+	$(CC) $(INCLUDES) $(CFLAGS) $(THREAD_FLAGS) sources/server.c -o server -DDEBUG -DDEBUG_VERBOSE -Wl,-rpath,./build/libs -L ./build/libs -lds -lserver -lcomm
 
 client: $(client_dependencies)
 	$(CC) $(INCLUDES) $(CFLAGS) sources/client.c -o client -DDEBUG -Wl,-rpath,./build/libs -L ./build/libs -lcomm -lapi

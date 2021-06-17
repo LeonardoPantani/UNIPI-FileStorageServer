@@ -20,5 +20,5 @@ typedef struct file {
 
     pthread_mutex_t mutex;
     pthread_cond_t  rilascioLock;
-    List            codaRichiedentiLock;
+    List*           codaRichiedentiLock;
 } File;

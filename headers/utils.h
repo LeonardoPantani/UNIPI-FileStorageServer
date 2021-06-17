@@ -40,6 +40,13 @@
 #define unlocka(mutex) if(pthread_mutex_unlock(&mutex) != 0) { fprintf(stderr, "Unlock semaforo fallita | File %s Riga %d\n", __FILE__, __LINE__); exit(EXIT_FAILURE); }
 
 
+/**
+ * @brief Allocazione di memoria che blocca tutto in caso di problemi e che imposta tutto a 0.
+ * 
+ * @param size  Dimensione da allocare in bytes.
+**/
+void* cmalloc(size_t size);
+
 
 /**
  * @brief Dà un valore in base a se il carattere specificato è nella stringa o no.

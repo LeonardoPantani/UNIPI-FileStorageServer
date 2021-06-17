@@ -148,7 +148,7 @@ int openFile(const char* pathname, int flags) { // O_CREATE = 1 | O_LOCK = 2 | O
                                 ppf(CLR_INFO); printSave("OF CLIENT> File remoto '%s' (%d bytes) salvato in '%s'", msg->path, msg->data_length, percorso); ppff();
                                 
                                 fclose(filePointer);
-                                //free(msg->path); // FIXME
+                                // free(msg->path); // FIXME
                                 free(msg->data);
                             }
                         }
@@ -262,7 +262,7 @@ int readFile(const char* pathname, void** buf, size_t* size) {
         }
 
         if(msg->action == ANS_OK) {
-            free(msg->path);
+            // free(msg->path); // FIXME
             free(msg);
             return 0;
         } else {
@@ -320,7 +320,7 @@ int readNFiles(int N, const char* dirname) {
                                 ppf(CLR_INFO); printSave("RN CLIENT> File remoto '%s' (%d bytes) salvato in '%s'", msg->path, msg->data_length, percorso); ppff();
                                 
                                 fclose(filePointer);
-                                free(msg->path);
+                                // free(msg->path); // FIXME
                                 free(msg->data);
                             }
                         }
@@ -384,7 +384,7 @@ int writeFile(const char* pathname, const char* dirname) {
             free(msg);
             return -1;
         }
-        void *buffer = malloc(sb.st_size);
+        void *buffer = cmalloc(sb.st_size);
         if(fread(buffer, 1, sb.st_size, file) != sb.st_size) {
             errno = EIO;
             free(msg);

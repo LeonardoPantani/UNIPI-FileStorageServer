@@ -27,7 +27,13 @@ int sendMessage(int fd, Message* msg) {
     
     // mando sempre tutto il messaggio (il body sarà vuoto)
     int ret = write(fd, msg, sizeof(Message));
-    checkM1(ret != sizeof(Message), "scrittura msg iniziale");
+    #ifdef DEBUG
+        checkM1(ret != sizeof(Message), "scrittura msg iniziale");
+    #else
+        if(ret != sizeof(Message)) { // la comunicazione è fallita (non è stato possibile inviare tutti i dati)
+            return -1;
+        }
+    #endif
 
     #ifdef DEBUG_VERBOSE
         printf("Send message>> BYTE SCRITTI (iniziali) (azione %d): %d\n", msg->action, ret); fflush(stdout);
@@ -70,8 +76,8 @@ int readMessage(int fd, Message* msg) {
 
     // leggo data dinamicamente (se è 0 la lunghezza non leggo nulla)
     if(msg->data_length > 0 && msg->data != NULL) {
-        msg->data = malloc(msg->data_length+1); // +1 così valgrind è contento
-        memset(msg->data, 0, msg->data_length+1); // +1 così valgrind è contento
+        msg->data = malloc(msg->data_length+1);
+        memset(msg->data, 0, msg->data_length+1);
         checkM1(msg->data == NULL, "malloc data");
 
         int remainingBytes = msg->data_length;
