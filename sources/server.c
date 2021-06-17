@@ -32,7 +32,7 @@ hashtable_t *ht = NULL;
 pthread_mutex_t* mutexHT = NULL;
 int nmutex = 0;
 
-List *coda_client = NULL;
+List coda_client;
 pthread_mutex_t mutexCodaClient = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t clientInAttesa = PTHREAD_COND_INITIALIZER;
 
@@ -412,26 +412,14 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
             /* =========== FINE CONTROLLO MEMORIA ================== */
 
             
-            void* dato = cmalloc(el->data_length+msg->data_length);
+            void* dato = malloc(el->data_length+msg->data_length);
+            memset(dato, 0, el->data_length+msg->data_length);
             memcpy(dato, el->data, el->data_length);
+            free(el->data);
             memcpy((char*)dato+(el->data_length), msg->data, msg->data_length);
 
-            
-            File* f = cmalloc(sizeof(File));
-            // imposto l'autore sulla connessione del socket
-            f->author = el->author;
-            // imposto la data di aggiornamento a ora
-            f->updatedDate = (unsigned long)time(NULL);
-            // imposto l'ultima azione su una append
-            f->lastAction = REQ_APPEND;
-            // imposto il percorso del file
-            strcpy(f->path, msg->path);
-            // imposto la dimensione del dato iniziale su 0
-            f->data_length = el->data_length+msg->data_length;
-            // imposto il dato su dato
-            f->data = dato;
-            
-            checkStop(ht_put(ht, msg->path, f) == HT_ERROR, "append file");
+            el->data = dato;
+            el->data_length = el->data_length+msg->data_length;
 
 
             // aggiorno le statistiche all'immissione di un file
@@ -481,7 +469,7 @@ void* gestoreConnessione(void* n) {
     while(TRUE) {
         locka(mutexCodaClient);
         locka(mutexChiusura);
-        while(coda_client->numClients == 0 || chiusuraDebole || chiusuraForte) {
+        while(coda_client.usedSlots == 0 || chiusuraDebole || chiusuraForte) {
             if(chiusuraDebole || chiusuraForte) {
                 unlocka(mutexChiusura);
                 unlocka(mutexCodaClient);
@@ -498,7 +486,7 @@ void* gestoreConnessione(void* n) {
         // da qui in poi ho trovato un client da servire, ne ottengo il socket dalla coda
         unlocka(mutexChiusura);
 
-        int socketConnection = removeFromList(coda_client);
+        int socketConnection = *((int *)listPop(&coda_client));
         unlocka(mutexCodaClient);
         checkStop(socketConnection == -1, "rimozione primo elemento dalla coda in attesa fallita");
         printSave("GC %d > Connessione ottenuta dalla coda.", numero);
@@ -611,7 +599,7 @@ void *gestorePool(void* socket) {
         unlocka(mutexStatistiche);
 
         locka(mutexCodaClient);
-        checkStop(addToList(coda_client, socketConnection) == -1, "impossibile aggiungere alla coda dei client in attesa");
+        checkStop(listPush(&coda_client, (char*)socketConnection, socketConnection) == -1, "impossibile aggiungere alla coda dei client in attesa");
         unlocka(mutexCodaClient);
         printSave("GP   > Connessione del client messa in coda!");
         checkStop(pthread_cond_signal(&clientInAttesa) != 0, "segnale arrivatoClient");
@@ -733,7 +721,7 @@ int main(int argc, char* argv[]) {
     
 
     // crea coda connessione
-    checkStop((coda_client = createList(config.max_connections)) == NULL, "creazione coda connessioni");
+    listInitialize(&coda_client);
 
     // creo tabella hash (salva i file)
     ht = ht_create(config.max_files);
@@ -818,7 +806,7 @@ int main(int argc, char* argv[]) {
 
     // eliminazione socket, creazione statistiche, chiusura file log, liberazione memoria
     unlink(config.socket_file_name);
-    deleteList(coda_client);
+    listDestroy(&coda_client);
 
 	printStats(config.stats_file_name, config.max_workers);
     printSave("MAIN > Le statistiche sono state salvate nel file '%s'.", config.stats_file_name);

@@ -80,11 +80,6 @@ void* ht_get(hashtable_t* hasht, char* key)
 	if(key == NULL) return NULL;
 	
 	unsigned int h = ht_calc_hash(key) % hasht->capacity;
-	if(h == 3) {
-		printf("OH NO\n");
-	}
-	printf("DEBUG> Posizione in tabella: %d\n", h);
-	fflush(stdout);
 	hash_elem_t* e = hasht->table[h];
 	while(e != NULL)
 	{

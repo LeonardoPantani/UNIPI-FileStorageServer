@@ -6,50 +6,206 @@
 
 #include "list.h"
 
-List* createList(int maxClients) {
-    checkNull(maxClients <= 0, "numero di client massimi minore o uguale a 0");
-    List* lista = cmalloc(sizeof(List));
-    checkNull(lista == NULL, "malloc lista client");
-
-    lista->array = cmalloc(maxClients*sizeof(int));
-    checkNull(lista->array == NULL, "malloc queue della lista client");
-
-    lista->maxClients = maxClients;
-    lista->numClients = 0;
-    lista->first = 0;
-    lista->last  = 0;
-    
-    return lista;
+void listInitialize(List* lista) {
+    lista->testa = NULL;
+    lista->coda = NULL;
+    lista->usedSlots = 0;
 }
 
 
-void deleteList(List *coda) {
-    if(coda != NULL)
-        free(coda->array);
-    free(coda);
+void listDestroy(List *lista) {
+    Slot* corrente = lista->testa;
+    Slot* precedente = NULL;
+
+    while(corrente != NULL) {
+        precedente = corrente;
+        corrente = corrente->next;
+
+        deleteSlot(precedente, TRUE);
+    }
 }
 
 
-int addToList(List *coda, int elemento) {
-    checkM1(coda == NULL, "add ad una coda che non esiste");
-    checkM1(coda->numClients >= coda->maxClients, "add ad una coda che ha raggiunto/superato il limite di client massimi");
-    coda->numClients++;
-    coda->array[coda->last] = elemento;
-    coda->last = coda->last+1;
+int listEnqueue(List *lista, char* chiave, void* data) {
+    Slot* nuovo = createSlot(chiave, data);
+
+    if(lista->coda == NULL) {
+        lista->testa = nuovo;
+        lista->coda = lista->testa;
+    } else {
+        lista->coda->next = nuovo;
+        lista->coda = lista->coda->next;
+    }
+
+    lista->usedSlots++;
 
     return 0;
 }
 
 
-int removeFromList(List *coda) {
-    checkM1(coda == NULL, "remove ad una coda che non esiste");
-    checkM1(coda->numClients <= 0, "remove ad una coda vuota"); 
+int listPush(List* lista, char* chiave, void* data) {
+    Slot* nuovo = createSlot(chiave, data);
 
-    int preso;
+    nuovo->next = lista->testa;
+    lista->testa = nuovo;
 
-    preso = coda->array[coda->first];
-    coda->numClients--;
-    coda->first = coda->first+1;
+    lista->usedSlots++;
 
-    return preso;
+    if(lista->usedSlots == 1) {
+        lista->coda = lista->testa;
+    }
+
+    return 0;
+}
+
+
+void* listPop(List *lista) {
+    Slot* corrente = lista->testa;
+    void* data;
+
+    if(lista->testa != NULL) {
+        data = corrente->data;
+        lista->testa = corrente->next;
+        lista->usedSlots--;
+
+        if(lista->usedSlots == 0) lista->coda = NULL;
+
+        deleteSlot(corrente, FALSE);
+
+        return data;
+    }
+
+    return NULL;
+}
+
+
+int listRemoveByKey(List* lista, char* chiave) {
+    Slot* corrente = lista->testa;
+    Slot* precedente = NULL;
+
+    while(corrente != NULL && corrente->key && strcmp(corrente->key, chiave) != 0) {
+        precedente = corrente;
+        corrente = corrente->next;
+    }
+
+    if(corrente == NULL) { // non trovato
+        return -1;
+    }
+
+    if(corrente != NULL && corrente == (lista->coda)) {
+        lista->coda = precedente;
+    }
+
+    if(precedente == NULL) {
+        lista->testa = lista->testa->next;
+    } else {
+        precedente->next = corrente->next;
+    }
+
+    deleteSlot(corrente, TRUE);
+    lista->usedSlots--;
+
+    return 0;
+}
+
+
+int listFind(List lista, char* chiave) {
+    Slot* corrente = lista.testa;
+
+    while(corrente != NULL) {
+        if(corrente->key != NULL && strcmp(corrente->key, chiave) == 0) {
+            return TRUE;
+        }
+        corrente = corrente->next;
+    }
+
+    return FALSE;
+}
+
+
+int listAdd(List* lista, int indice, char* chiave, void* data) {
+    int i = 0;
+
+    Slot* precedente = NULL;
+    Slot* corrente = lista->testa;
+    Slot* nuovo = createSlot(chiave, data);
+
+    if(indice < 0 || indice > lista->usedSlots) {
+        return -1;
+    }
+
+    if(indice == 0) {
+        deleteSlot(nuovo, TRUE);
+        return listPush(lista, chiave, data);
+    } else if(indice == lista->usedSlots) {
+        deleteSlot(nuovo, TRUE);
+        return listEnqueue(lista, data, chiave);
+    }
+
+    while(i < indice) {
+        precedente = corrente;
+        corrente = corrente->next;
+        i++;
+    }
+
+    precedente->next = nuovo;
+    nuovo->next = corrente;
+
+    lista->usedSlots++;
+
+    return 0;
+}
+
+
+void* listGetByIndex(List lista, int indice) {
+    int i = 0;
+
+    Slot* corrente = lista.testa;
+
+    if(indice < 0 || indice >= lista.usedSlots) {
+        return NULL;
+    }
+
+    while(i < indice) {
+        corrente = corrente->next;
+        i++;
+    }
+
+    if(corrente != NULL) {
+        return corrente->data;
+    }
+
+    return NULL;
+}
+
+
+int listRemoveByIndex(List* lista, int indice) {
+    int i = 0;
+    Slot* corrente = lista->testa;
+    Slot* precedente = NULL;
+
+    if(indice < 0 || indice >= lista->usedSlots) {
+        return -1;
+    } else if(indice == 0) {
+        listPop(lista);
+        return 0;
+    }
+
+    while(i < indice && i < lista->usedSlots) {
+        precedente = corrente;
+        corrente = corrente->next;
+        i++;
+    }
+
+    if(indice == (lista->usedSlots - 1)) {
+        lista->testa = precedente;
+    }
+
+    precedente->next = corrente->next;
+
+    deleteSlot(corrente, TRUE);
+
+    lista->usedSlots--;
+
+    return 0;
 }
