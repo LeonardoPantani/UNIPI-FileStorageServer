@@ -100,3 +100,35 @@ int readMessage(int fd, Message* msg) {
     #endif
     return 0;
 }
+
+char* getRequestName(int code) {
+    switch(code) {
+        case 0 : return "UNKNOWN";
+        case 12: return "OPEN";
+        case 13: return "READ";
+        case 14: return "READ_N";
+        case 15: return "WRITE";
+        case 16: return "APPEND";
+        case 17: return "LOCK";
+        case 18: return "UNLOCK";
+        case 19: return "CLOSE";
+        case 20: return "DELETE";
+
+        default: return "?";
+    }
+}
+
+char* getOperationName(int code) {
+    switch(code) {
+        case 0 : return "UNKNOWN";
+        case 1: return "AC_WRITE_RECU";
+        case 2: return "AC_WRITE_LIST";
+        case 3: return "AC_READ_LIST";
+        case 4: return "AC_READ_RECU";
+        case 5: return "AC_ACQUIRE_MUTEX";
+        case 6: return "AC_RELEASE_MUTEX";
+        case 7: return "AC_DELETE";
+
+        default: return "?";
+    }
+}

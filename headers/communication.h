@@ -66,7 +66,7 @@ typedef struct {
     ActionType  action;
     int         flags;
 
-    char        path[MAX_PATH_LENGTH];
+    char        path[PATH_MAX];
 
     int         data_length;
     char*       data;
@@ -99,11 +99,31 @@ int sendMessage(int fd, Message* msg);
 /**
  * @brief Legge un header dal descrittore file
  * 
- * @param fd        Descrittore da cui ricevere l'header
+ * @param fd    Descrittore da cui ricevere l'header
  * @param msg   Puntatore su dove salvare l'header
  * 
  * @returns 0 in caso di successo, -1 in caso di fallimento
 **/
 int readMessage(int fd, Message* msg);
+
+
+/**
+ * @brief Fornisce il nome delle richieste
+ * 
+ * @param code  Codice della richiesta
+ * 
+ * @returns la stringa relativa al codice fornito
+**/
+char* getRequestName(int code);
+
+
+/**
+ * @brief Fornisce il nome delle operazioni
+ * 
+ * @param code  Codice dell'operazione
+ * 
+ * @returns la stringa relativa al codice fornito
+**/
+char* getOperationName(int code);
 
 #endif /* COMMUNICATION_H_ */

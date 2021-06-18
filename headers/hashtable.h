@@ -11,7 +11,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
-#include "list.h"
 
 //Hashtable element structure
 typedef struct hash_elem_t {

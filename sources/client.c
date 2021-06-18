@@ -29,11 +29,10 @@ int verbose = FALSE; // stampa per ogni operazione
 
 long timeoutRequests = 0; // tempo tra una richiesta e l'altra
 
-char ejectedFileFolder[PATH_MAX]; // -D percorso dove salvare file espulsi dal server (serve w|W)
+char ejectedFileFolder[PATH_MAX]; // -D savedFilePath dove salvare file espulsi dal server (serve w|W)
 
-char savedFileFolder[PATH_MAX]; // -d percorso dove salvare i file letti dal server (serve r|R)
+char savedFileFolder[PATH_MAX]; // -d savedFilePath dove salvare i file letti dal server (serve r|R)
 
-int chiusuraForte = FALSE;
 pthread_mutex_t mutexChiusura = PTHREAD_MUTEX_INITIALIZER;
 
 void help(void) {
@@ -53,58 +52,65 @@ void help(void) {
     ppf(CLR_INFO); printf("    -p                 \033[0m->\033[94m abilita le stampe sull'stdout di ogni operazione\n"); ppff();
 }
 
-static int sendFilesList(char* nomeCartella, int numFiles, int completed, int total) {
+int writeOnFile(char* filePath, struct stat properties) {
+    if(openFile(filePath, O_CREATE) == 0) { // se il file non esiste lo creo, ci scrivo e lo chiudo
+        if(writeFile(filePath, ejectedFileFolder) == 0) { 
+            if(closeFile(filePath) == 0) {
+                return 1;
+            }
+        }
+    } else if(openFile(filePath, 0) == 0) { // se il file esiste già allora lo apro, ci scrivo in append e lo chiudo
+        FILE* filePointer;
+        filePointer = fopen(filePath, "rb");
+        checkStop(filePointer == NULL, "file rilevato nella cartella non aperto");
+
+        void* data = cmalloc(sizeof(char)*properties.st_size);
+
+        if(fread(data, 1, properties.st_size, filePointer) == properties.st_size) { // se la lettura ha successo
+            if(appendToFile(filePath, data, properties.st_size, ejectedFileFolder) == 0) {
+                if(closeFile(filePath) == 0) {
+                    return 1;
+                }
+            }
+        }
+
+        fclose(filePointer);
+        free(data);
+    }
+
+    return 0;
+}
+
+static int sendFilesList(char* folderPath, int numFiles, int completed, int total) {
     if(numFiles > 0 || numFiles == -1) {
-        DIR* cartella;
+        DIR* folder;
         struct dirent *entry;
 
-        if(!(cartella = opendir(nomeCartella))) return -1;
+        if(!(folder = opendir(folderPath))) return -1;
 
-        while((entry = readdir(cartella)) != NULL && (numFiles > 0 || numFiles == -1)) {
+        while((entry = readdir(folder)) != NULL && (numFiles > 0 || numFiles == -1)) {
             char path[PATH_MAX];
-            if(nomeCartella[strlen(nomeCartella)-1] != '/')
-                snprintf(path, sizeof(path), "%s/%s", nomeCartella, entry->d_name);
+            if(folderPath[strlen(folderPath)-1] != '/')
+                snprintf(path, sizeof(path), "%s/%s", folderPath, entry->d_name);
             else
-                snprintf(path, sizeof(path), "%s%s", nomeCartella, entry->d_name);
-            struct stat proprieta;
+                snprintf(path, sizeof(path), "%s%s", folderPath, entry->d_name);
+            
+            struct stat properties;
 
-            if(stat(path, &proprieta) == 0) {
-                if(S_ISDIR(proprieta.st_mode)) { // fix (?)
+            if(stat(path, &properties) == 0) {
+                if(S_ISDIR(properties.st_mode)) {
                     if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
                         continue;
                     sendFilesList(path, numFiles, completed, total);
                 } else { // è un file
-                    if(openFile(path, O_CREATE|O_LOCK) == 0) { // prima vede se il file va creato o c'è già
-                        if(writeFile(path, ejectedFileFolder) == 0) { // se il file non esiste allora lo blocco e ci scrivo sopra
-                            completed++;
-                        }
-                        //unlockFile(path);
-                    } else if(openFile(path, O_LOCK) == 0) { // se il file esiste già allora faccio la lock e appendo
-                        FILE* filePointer;
-                        filePointer = fopen(path, "rb");
-                        if(filePointer == NULL) { pe("File non aperto!"); }
-
-                        void* data = cmalloc(sizeof(char)*proprieta.st_size);
-
-                        if(fread(data, 1, proprieta.st_size, filePointer) == proprieta.st_size) { // se la lettura da file avviene correttamente
-                            if(appendToFile(path, data, proprieta.st_size, ejectedFileFolder) == 0) { // allora faccio la append
-                                completed++;
-                            }
-                            //unlockFile(path);
-                        }
-
-                        fclose(filePointer);
-                        free(data);
-                    } else { // c'è un problema relativo al file o qualcos'altro
-                        // NULLA
-                    }
+                    completed += writeOnFile(path, properties);
                     total++;
                     
                     if(numFiles != -1) numFiles--;
                 }
             }
         }
-        closedir(cartella);
+        closedir(folder);
     }
 
     return total-completed;
@@ -115,19 +121,19 @@ static int executeAction(ActionType ac, char* parameters) {
     switch(ac) {
         case AC_WRITE_RECU: { // -w
             char* savePointer;
-            char* nomeCartella, *temp;
-            DIR* cartella;
+            char* folderPath, *temp;
+            DIR* folder;
 
             int numFiles = -1;
             
-            nomeCartella = strtok_r(parameters, ",", &savePointer);
-            if((cartella = opendir(nomeCartella)) == NULL) {
-                ppf(CLR_ERROR); printSave("CLIENT> Cartella specificata '%s' inesistente.", nomeCartella); ppff();
-                free(cartella);
+            folderPath = strtok_r(parameters, ",", &savePointer);
+            if((folder = opendir(folderPath)) == NULL) {
+                ppf(CLR_ERROR); printSave("CLIENT> Cartella specificata '%s' inesistente.", folderPath); ppff();
+                free(folder);
                 return -1;
             } else {
-                ppf(CLR_HIGHLIGHT); printf("CLIENT> Cartella per la write impostata su '%s'", nomeCartella); fflush(stdout);
-                free(cartella);
+                ppf(CLR_HIGHLIGHT); printf("CLIENT> Cartella per la write impostata su '%s'", folderPath); fflush(stdout);
+                free(folder);
             }
             temp = strtok_r(NULL, ",", &savePointer);
 
@@ -151,57 +157,33 @@ static int executeAction(ActionType ac, char* parameters) {
                 printf(" | numero file: TUTTI\n"); ppff(); fflush(stdout);
             }
 
-            return sendFilesList(nomeCartella, numFiles, 0, 0); // restituisce la differenza tra file totali e file inviati con successo (se 0 ok, !=0 non tutti inviati)
+            return sendFilesList(folderPath, numFiles, 0, 0); // restituisce la differenza tra file totali e file inviati con successo (se 0 ok, !=0 non tutti inviati)
         }
 
         case AC_WRITE_LIST: { // -W
             char* savePointer;
-            char* nomeFile;
+            char* filePath;
 
             int completed = 0;
             int total = 0;
 
-            nomeFile = strtok_r(parameters, ",", &savePointer);
-            while(nomeFile != NULL) {
+            filePath = strtok_r(parameters, ",", &savePointer);
+            while(filePath != NULL) {
                 total++;
 
-                struct stat proprieta;
-                int esito = stat(nomeFile, &proprieta);
+                struct stat properties;
 
-                if(esito == 0) {
-                    if(S_ISDIR(proprieta.st_mode) == 0) {
-                        if(openFile(nomeFile, O_CREATE|O_LOCK) == 0) { // prima vede se il file va creato o c'è già
-                            if(writeFile(nomeFile, ejectedFileFolder) == 0) { // se il file non esiste allora lo blocco e ci scrivo sopra
-                                completed++;
-                            }
-                            //unlockFile(nomeFile);
-                        } else if(openFile(nomeFile, O_LOCK) == 0) { // se il file esiste già allora faccio la lock e appendo
-                            FILE* filePointer;
-                            filePointer = fopen(nomeFile, "rb");
-                            if(filePointer == NULL) { pe("File non aperto!!"); }
-
-                            void* data = cmalloc(sizeof(char)*proprieta.st_size);
-
-                            if(fread(data, 1, proprieta.st_size, filePointer) == proprieta.st_size) { // se la lettura da file avviene correttamente
-                                if(appendToFile(nomeFile, data, proprieta.st_size, ejectedFileFolder) == 0) { // allora faccio la append
-                                    completed++;
-                                }
-                                //unlockFile(nomeFile);
-                            }
-
-                            fclose(filePointer);
-                            free(data);
-                        } else { // c'è un problema relativo al file o qualcos'altro
-                            // NULLA
-                        }
+                if(stat(filePath, &properties) == 0) {
+                    if(S_ISDIR(properties.st_mode) == 0) {
+                        completed += writeOnFile(filePath, properties);
                     } else {
-                        ppf(CLR_ERROR); printSave("CLIENT> '%s' è una cartella.", nomeFile); ppff();
+                        ppf(CLR_ERROR); printSave("CLIENT> '%s' è una cartella.", filePath); ppff();
                     }
                 } else {
-                    ppf(CLR_ERROR); printSave("CLIENT> Il file '%s' non esiste o è corrotto.", nomeFile); ppff();
+                    ppf(CLR_ERROR); printSave("CLIENT> Il file '%s' non esiste o è corrotto.", filePath); ppff();
                 }
 
-                nomeFile = strtok_r(NULL, ",", &savePointer);
+                filePath = strtok_r(NULL, ",", &savePointer);
             }
 
             if(total - completed != 0) { // almeno un file non è stato inviato
@@ -213,10 +195,10 @@ static int executeAction(ActionType ac, char* parameters) {
 
         case AC_READ_LIST: { // -r
             char* savePointer;
-            char* nomeFile;
+            char* filePath;
 
-            void* puntatoreFile;
-            size_t dimensioneFile;
+            void* filePointer;
+            size_t fileSize;
 
             int saveFiles = TRUE;
 
@@ -225,36 +207,36 @@ static int executeAction(ActionType ac, char* parameters) {
                 saveFiles = FALSE;
             }
             
-            nomeFile = strtok_r(parameters, ",", &savePointer);
-            while(nomeFile != NULL) {
-                if(readFile(nomeFile, &puntatoreFile, &dimensioneFile) == 0) {
+            filePath = strtok_r(parameters, ",", &savePointer);
+            while(filePath != NULL) {
+                if(readFile(filePath, &filePointer, &fileSize) == 0) {
                     if(saveFiles) { // effettuo operazioni sottostanti solo se i file vanno salvati
                         FILE* filePointer;
-                        char percorso[PATH_MAX];
+                        char savedFilePath[PATH_MAX];
 
-                        memset(percorso, 0, PATH_MAX);
+                        memset(savedFilePath, 0, PATH_MAX);
 
-                        strcpy(percorso, savedFileFolder);
+                        strcpy(savedFilePath, savedFileFolder);
                                         
-                        if(percorso[PATH_MAX - 1] != '/') {
-                            strcat(percorso, "/");
+                        if(savedFilePath[PATH_MAX - 1] != '/') {
+                            strcat(savedFilePath, "/");
                         }
-                        strcat(percorso, basename(nomeFile));
+                        strcat(savedFilePath, basename(filePath));
 
-                        filePointer = fopen(percorso, "wb");
-                        if(filePointer == NULL) { pe("File non aperto!!"); }
+                        filePointer = fopen(savedFilePath, "wb");
+                        checkStop(filePointer == NULL, "file rilevato nella cartella non aperto");
 
-                        fwrite(puntatoreFile, 1, dimensioneFile, filePointer);
-                        ppf(CLR_INFO); printSave("CLIENT> File '%s' salvato in '%s'", nomeFile, percorso); ppff();
+                        fwrite(filePointer, 1, fileSize, filePointer);
+                        ppf(CLR_INFO); printSave("CLIENT> File '%s' salvato in '%s'", filePath, savedFilePath); ppff();
 
-                        free(puntatoreFile);   
+                        free(filePointer);   
                         fclose(filePointer);
                     }
                 } else {
                     return -1; // appena un file non viene letto do operazione fallita
                 }
                 
-                nomeFile = strtok_r(NULL, ",", &savePointer);
+                filePath = strtok_r(NULL, ",", &savePointer);
             }
         }
 
@@ -263,7 +245,7 @@ static int executeAction(ActionType ac, char* parameters) {
 
             if(parameters != NULL) { num = atoi(parameters); } else { num = -1; }
 
-            if(readNFiles(num, savedFileFolder) != 0) { // il lettura dei file è fallita
+            if(readNFiles(num, savedFileFolder) != 0) { // lettura dei file fallita
                 return -1;
             }
 
@@ -272,19 +254,19 @@ static int executeAction(ActionType ac, char* parameters) {
 
         case AC_DELETE: { // -c
             char* savePointer;
-            char* nomeFile;
+            char* filePath;
 
             int completed = 0;
             int total = 0;
 
-            nomeFile = strtok_r(parameters, ",", &savePointer);
-            while(nomeFile != NULL) {
+            filePath = strtok_r(parameters, ",", &savePointer);
+            while(filePath != NULL) {
                 total++;
-                if(removeFile(nomeFile) == 0) {
+                if(removeFile(filePath) == 0) {
                     completed++;
                 }
                 
-                nomeFile = strtok_r(NULL, ",", &savePointer);
+                filePath = strtok_r(NULL, ",", &savePointer);
             }
 
             if(total - completed != 0) {  // almeno un file non è stato eliminato
@@ -296,15 +278,15 @@ static int executeAction(ActionType ac, char* parameters) {
 
         case AC_ACQUIRE_MUTEX: { // -l
             char* savePointer;
-            char* nomeFile;
+            char* filePath;
 
-            nomeFile = strtok_r(parameters, ",", &savePointer);
-            while(nomeFile != NULL) {
-                if(lockFile(nomeFile) != 0) {
+            filePath = strtok_r(parameters, ",", &savePointer);
+            while(filePath != NULL) {
+                if(lockFile(filePath) != 0) {
                     return -1; // appena un file non viene letto do operazione fallita
                 }
                 
-                nomeFile = strtok_r(NULL, ",", &savePointer);
+                filePath = strtok_r(NULL, ",", &savePointer);
             }
 
             break;
@@ -312,21 +294,22 @@ static int executeAction(ActionType ac, char* parameters) {
 
         case AC_RELEASE_MUTEX: { // -u
             char* savePointer;
-            char* nomeFile;
+            char* filePath;
 
-            nomeFile = strtok_r(parameters, ",", &savePointer);
-            while(nomeFile != NULL) {
-                if(unlockFile(nomeFile) != 0) {
+            filePath = strtok_r(parameters, ",", &savePointer);
+            while(filePath != NULL) {
+                if(unlockFile(filePath) != 0) {
                     return -1; // appena un file non viene letto do operazione fallita
                 }
-                closeFile(nomeFile);
-                nomeFile = strtok_r(NULL, ",", &savePointer);
+                closeFile(filePath);
+                filePath = strtok_r(NULL, ",", &savePointer);
             }
 
             break;
         }
         
         default: {
+            ppf(CLR_ERROR); printSave("CLIENT> Operazione n°%d non ancora supportata.", ac); ppff();
             break;
         }
     }
@@ -338,10 +321,12 @@ int main(int argc, char* argv[]) {
 	if(argc > 1) {
 		int opt;
         
-        ActionType listaAzioni[50];
-        char listaParametri[50][1024];
+        ActionType actionList[50];
+        char parameterList[50][PATH_MAX];
+
         int actions = 0;
-        DIR* cartella;
+
+        DIR* folder;
         strcpy(ejectedFileFolder, "#"); // imposta il valore iniziale su #
         strcpy(savedFileFolder, "#"); // imposta il valore iniziale su #
 
@@ -363,56 +348,56 @@ int main(int argc, char* argv[]) {
                 break;
 
                 case 'w': { // salva i file contenuti in una cartella su server
-                    listaAzioni[actions] = AC_WRITE_RECU;
-                    strcpy(listaParametri[actions], optarg);
+                    actionList[actions] = AC_WRITE_RECU;
+                    strcpy(parameterList[actions], optarg);
                     actions++;
                     if(verbose) { ppf(CLR_INFO); printf("CLIENT> Operazione AC_WRITE_RECU (-w) in attesa.\n"); ppff(); }
                     break;
                 }
 
                 case 'W': { // salva i file separati da virgola
-                    listaAzioni[actions] = AC_WRITE_LIST;
-                    strcpy(listaParametri[actions], optarg);
+                    actionList[actions] = AC_WRITE_LIST;
+                    strcpy(parameterList[actions], optarg);
                     actions++;
                     if(verbose) { ppf(CLR_INFO); printf("CLIENT> Operazione AC_WRITE_LIST (-W) in attesa.\n"); ppff(); }
                     break;
                 }
 
                 case 'D': { // cartella dove salvare file espulsi dal server (INSIEME A w|W!)
-                    if((cartella = opendir(optarg)) == NULL) {
+                    if((folder = opendir(optarg)) == NULL) {
                         ppf(CLR_ERROR); printf("CLIENT> Cartella specificata '%s' inesistente (-D).\n", optarg); ppff();
-                        free(cartella);
+                        free(folder);
                         break;
                     }
-                    free(cartella);
+                    closedir(folder);
                     strcpy(ejectedFileFolder, optarg);
                     if(verbose) { ppf(CLR_HIGHLIGHT); printf("CLIENT> Cartella impostata su '%s' (-D).\n", optarg); ppff(); }
                     break;
                 }
 
                 case 'r': { // lista di file da leggere dal server separati da virgola
-                    listaAzioni[actions] = AC_READ_LIST;
-                    strcpy(listaParametri[actions], optarg);
+                    actionList[actions] = AC_READ_LIST;
+                    strcpy(parameterList[actions], optarg);
                     actions++;
                     if(verbose) { ppf(CLR_INFO); printf("CLIENT> Operazione AC_READ_LIST in attesa.\n"); ppff(); }
                     break;
                 }
 
                 case 'R': { // legge n file qualsiasi dal server (se n=0 vengono letti tutti)
-                    listaAzioni[actions] = AC_READ_RECU;
-                    strcpy(listaParametri[actions], optarg);
+                    actionList[actions] = AC_READ_RECU;
+                    strcpy(parameterList[actions], optarg);
                     actions++;
                     if(verbose) { ppf(CLR_INFO); printf("CLIENT> Operazione AC_READ_RECU in attesa.\n"); ppff(); }
                     break;
                 } 
 
                 case 'd': { // cartella dove salvare file letti con la r oppure R (INSIEME A r|R)
-                    if((cartella = opendir(optarg)) == NULL) {
+                    if((folder = opendir(optarg)) == NULL) {
                         ppf(CLR_ERROR); printf("CLIENT> Cartella specificata '%s' inesistente (-d).\n", optarg); ppff();
-                        free(cartella);
+                        free(folder);
                         break;
                     }
-                    free(cartella);
+                    closedir(folder);
                     strcpy(savedFileFolder, optarg);
                     if(verbose) { ppf(CLR_HIGHLIGHT); printf("CLIENT> Cartella impostata su '%s' (-d).\n", optarg); ppff(); }
                     break;
@@ -425,24 +410,24 @@ int main(int argc, char* argv[]) {
                 }
 
                 case 'l': { // lista di nomi di cui acquisire mutex
-                    listaAzioni[actions] = AC_ACQUIRE_MUTEX;
-                    strcpy(listaParametri[actions], optarg);
+                    actionList[actions] = AC_ACQUIRE_MUTEX;
+                    strcpy(parameterList[actions], optarg);
                     actions++;
                     if(verbose) { ppf(CLR_INFO); printf("CLIENT> Operazione AC_ACQUIRE_MUTEX in attesa.\n"); ppff(); }
                     break;
                 }
 
                 case 'u': { // lista di nomi di cui rilasciare mutex
-                    listaAzioni[actions] = AC_RELEASE_MUTEX;
-                    strcpy(listaParametri[actions], optarg);
+                    actionList[actions] = AC_RELEASE_MUTEX;
+                    strcpy(parameterList[actions], optarg);
                     actions++;
                     if(verbose) { ppf(CLR_INFO); printf("CLIENT> Operazione AC_RELEASE_MUTEX in attesa.\n"); ppff(); }
                     break;
                 }
 
                 case 'c': { // lista di file da rimuovere dal server
-                    listaAzioni[actions] = AC_DELETE;
-                    strcpy(listaParametri[actions], optarg);
+                    actionList[actions] = AC_DELETE;
+                    strcpy(parameterList[actions], optarg);
                     actions++;
                     if(verbose) { ppf(CLR_INFO); printf("CLIENT> Operazione AC_DELETE in attesa.\n"); ppff(); }
                     break;
@@ -476,13 +461,10 @@ int main(int argc, char* argv[]) {
         
 
         int socketConnection;
-        struct timespec tempoMassimo;
-        tempoMassimo.tv_nsec = 0;
-        tempoMassimo.tv_sec  = 10;
-        
 
-        if((socketConnection = openConnection(socketPath, 4999, tempoMassimo)) == -1) {
-            // connessione fallita
+        struct timespec maxTimeout; maxTimeout.tv_nsec = 0; maxTimeout.tv_sec  = 10;
+
+        if((socketConnection = openConnection(socketPath, 1000, maxTimeout)) == -1) { // connessione fallita
             pe("CLIENT> Errore durante la connessione");
             fclose(fileLog);
             free(socketPath);
@@ -497,7 +479,7 @@ int main(int argc, char* argv[]) {
         s.sa_handler = SIG_IGN;
         // ignoro SIGPIPE per evitare di essere terminato da una scrittura su un socket chiuso
         if ((sigaction(SIGPIPE, &s, NULL)) == -1) {
-            pe("Errore sigaction");
+            pe("CLIENT> Errore sigaction");
             fclose(fileLog);
             free(socketPath);
             return -1;
@@ -538,15 +520,15 @@ int main(int argc, char* argv[]) {
         if(ac == ANS_WELCOME) {
             // eseguo tutte le azioni richieste
             for(int i = 0; i < actions; i++) {
-                if(executeAction(listaAzioni[i], listaParametri[i]) == 0) {
-                    ppf(CLR_SUCCESS); printf("CLIENT> Operazione n°%d completata con successo.\n", listaAzioni[i]); ppff();
+                if(executeAction(actionList[i], parameterList[i]) == 0) {
+                    ppf(CLR_SUCCESS); printf("CLIENT> Operazione %s completata con successo\n", getOperationName(actionList[i])); ppff();
                     
 					struct timespec t;
 					t.tv_sec  = (int)timeoutRequests/1000;
 					t.tv_nsec = (timeoutRequests%1000)*1000000000;
 					nanosleep(&t, NULL);
                 } else {
-                    ppf(CLR_ERROR); printf("CLIENT> Operazione n°%d fallita. Motivo: %s (codice errore %d)\n", listaAzioni[i], strerror(errno), errno); ppff();
+                    ppf(CLR_ERROR); printf("CLIENT> Operazione %s fallita, motivo: %s (codice errore %d)\n", getOperationName(actionList[i]), strerror(errno), errno); ppff();
                 }
             }
         }

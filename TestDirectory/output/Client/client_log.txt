@@ -1,3 +1,0 @@
-CLIENT> Ricevuto WELCOME dal server: Benvenuto, sono in attesa di tue richieste
-CLIENT> Rispondo al WELCOME con: Grazie, ci sono
-CLIENT> Inviato HELLO al server con successo!

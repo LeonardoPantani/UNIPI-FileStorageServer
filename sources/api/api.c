@@ -42,6 +42,8 @@ int searchAssocByName(char* socketname) {
     return -1;
 }
 
+
+
 int openConnection(const char* sockname, int msec, const struct timespec abstime) {
     // creazione socket
     int socket_fd = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -60,7 +62,7 @@ int openConnection(const char* sockname, int msec, const struct timespec abstime
     t.tv_nsec = (msec%1000)*1000000;
 
     while(TRUE) {
-        clock_gettime(CLOCK_MONOTONIC, &tempoAttuale);
+        checkM1(clock_gettime(CLOCK_MONOTONIC, &tempoAttuale), "ottenimento orario corrente openConnection");
         if(timespecDiff(tempoInizio, tempoAttuale, abstime)) {
             break;
         }
@@ -84,7 +86,8 @@ int openConnection(const char* sockname, int msec, const struct timespec abstime
 
 int closeConnection(const char* sockname) {
     int fd;
-    if((fd = searchAssocByName((char*)sockname)) != -1) {
+
+    if((fd = searchAssocByName((char*)sockname)) != -1) { // se il file descriptor relativo viene trovato
         close(fd);
         return 0;
     } else {
@@ -93,14 +96,14 @@ int closeConnection(const char* sockname) {
 }
 
 
-int openFile(const char* pathname, int flags) { // O_CREATE = 1 | O_LOCK = 2 | O_CREATE && O_LOCK = 3
-    if(flags != 1 && flags != 2 && flags != 3) { // le flag passate non sono valide
+int openFile(const char* pathname, int flags) {
+    if(flags != 0 && flags != 1) { // le flag passate non sono valide (0 -> open | 1 -> open & create)
         errno = EINVAL;
         return -1;
     }
     
     // creo variabile per contenere richieste
-    Message* msg = calloc(4, sizeof(Message));
+    Message* msg = cmalloc(sizeof(Message));
     checkStop(msg == NULL, "malloc risposta");
     // fine variabile per contenere richieste
 
@@ -122,7 +125,7 @@ int openFile(const char* pathname, int flags) { // O_CREATE = 1 | O_LOCK = 2 | O
                     }
 
                     case ANS_STREAM_START: {
-                        while(readMessage(socketConnection, msg) == 0 && msg->action != ANS_STREAM_END) {
+                        while(readMessage(socketConnection, msg) == 0 && msg->action == ANS_STREAM_FILE) {
                             ppf(CLR_HIGHLIGHT); printSave("OF CLIENT> Espulso file remoto '%s' (%d bytes) per fare spazio a %s", msg->path, msg->data_length, pathname); ppff();
                             if(strcmp(ejectedFileFolder, "#") == 0) {
                                 ppf(CLR_WARNING); printSave("OF CLIENT> Il file remoto '%s' (%d bytes) non verrà salvato perché non è stata specificata nessuna cartella con -D.", msg->path, msg->data_length); ppff();
@@ -148,7 +151,6 @@ int openFile(const char* pathname, int flags) { // O_CREATE = 1 | O_LOCK = 2 | O
                                 ppf(CLR_INFO); printSave("OF CLIENT> File remoto '%s' (%d bytes) salvato in '%s'", msg->path, msg->data_length, percorso); ppff();
                                 
                                 fclose(filePointer);
-                                // free(msg->path); // FIXME
                                 free(msg->data);
                             }
                         }
@@ -168,9 +170,9 @@ int openFile(const char* pathname, int flags) { // O_CREATE = 1 | O_LOCK = 2 | O
                         break;
                     }
 
-                    case ANS_BAD_RQST: {
-                        ppf(CLR_ERROR); printSave("OF CLIENT> Richiesta errata!"); ppff();
-                        errno = EBADRQC;
+                    case ANS_NO_PERMISSION: {
+                        ppf(CLR_ERROR); printSave("OF CLIENT> Il file '%s' non può essere letto perché è lockato da un altro client.", pathname); ppff();
+                        errno = EACCES;
                         break;
                     }
 
@@ -216,7 +218,7 @@ int openFile(const char* pathname, int flags) { // O_CREATE = 1 | O_LOCK = 2 | O
 
 int readFile(const char* pathname, void** buf, size_t* size) {
     // creo variabile per contenere richieste
-    Message* msg = calloc(4, sizeof(Message));
+    Message* msg = cmalloc(sizeof(Message));
     checkStop(msg == NULL, "malloc risposta");
     // fine variabile per contenere richieste
 
@@ -232,12 +234,6 @@ int readFile(const char* pathname, void** buf, size_t* size) {
                         *buf = msg->data;
                         *size = msg->data_length;
                         ppf(CLR_INFO); printSave("RF CLIENT> File '%s' salvato in memoria.", pathname); ppff();
-                        break;
-                    }
-
-                    case ANS_NO_PERMISSION: {
-                        ppf(CLR_ERROR); printSave("RF CLIENT> Il file '%s' non può essere letto perché è lockato da un altro client.", pathname); ppff();
-                        errno = EACCES;
                         break;
                     }
 
@@ -262,7 +258,6 @@ int readFile(const char* pathname, void** buf, size_t* size) {
         }
 
         if(msg->action == ANS_OK) {
-            // free(msg->path); // FIXME
             free(msg);
             return 0;
         } else {
@@ -278,7 +273,7 @@ int readFile(const char* pathname, void** buf, size_t* size) {
 
 int readNFiles(int N, const char* dirname) {
     // creo variabile per contenere richieste
-    Message* msg = calloc(4, sizeof(Message));
+    Message* msg = cmalloc(sizeof(Message));
     checkStop(msg == NULL, "malloc risposta");
     // fine variabile per contenere richieste
 
@@ -294,7 +289,8 @@ int readNFiles(int N, const char* dirname) {
             if(readMessage(socketConnection, msg) == 0) {
                 switch(msg->action) {
                     case ANS_STREAM_START: {
-                        while(readMessage(socketConnection, msg) == 0 && msg->action != ANS_STREAM_END) {
+                        int i = 0;
+                        while(readMessage(socketConnection, msg) == 0 && msg->action == ANS_STREAM_FILE) {
                             ppf(CLR_HIGHLIGHT); printSave("RN CLIENT> File remoto '%s' ricevuto dal server.", msg->path); ppff();
                             if(strcmp(savedFileFolder, "#") == 0) {
                                 ppf(CLR_WARNING); printSave("RN CLIENT> Il file remoto '%s' (%d bytes) non verrà salvato perché non è stata specificata nessuna cartella con -d.", msg->path, msg->data_length); ppff();
@@ -320,8 +316,17 @@ int readNFiles(int N, const char* dirname) {
                                 ppf(CLR_INFO); printSave("RN CLIENT> File remoto '%s' (%d bytes) salvato in '%s'", msg->path, msg->data_length, percorso); ppff();
                                 
                                 fclose(filePointer);
-                                // free(msg->path); // FIXME
                                 free(msg->data);
+                            }
+                            i++;
+                        }
+
+                        if(readMessage(socketConnection, msg) == 0) {
+                            if(msg->action == ANS_OK) {
+                                printSave("RN CLIENT> Lettura %d files completata!", i);
+                            } else {
+                                ppf(CLR_ERROR); printSave("RN CLIENT> Il server ha mandato una risposta non valida (2). ACTION: %d", msg->action); ppff();
+                                errno = EBADRQC;
                             }
                         }
                         break;
@@ -347,7 +352,7 @@ int readNFiles(int N, const char* dirname) {
             errno = EBADE;
         }
 
-        if(msg->action == ANS_STREAM_END) {
+        if(msg->action == ANS_OK) {
             free(msg);
             return 0;
         } else {
@@ -363,7 +368,7 @@ int readNFiles(int N, const char* dirname) {
 
 int writeFile(const char* pathname, const char* dirname) {
     // creo variabile per contenere richieste
-    Message* msg = calloc(4, sizeof(Message));
+    Message* msg = cmalloc(sizeof(Message));
     checkStop(msg == NULL, "malloc risposta");
     // fine variabile per contenere richieste
 
@@ -405,7 +410,7 @@ int writeFile(const char* pathname, const char* dirname) {
                     }
                     
                     case ANS_STREAM_START: {
-                        while(readMessage(socketConnection, msg) == 0 && msg->action != ANS_STREAM_END) {
+                        while(readMessage(socketConnection, msg) == 0 && msg->action == ANS_STREAM_FILE) {
                             ppf(CLR_HIGHLIGHT); printSave("WF CLIENT> Espulso file remoto '%s' (%d bytes) per fare spazio a %s (%ld bytes)", msg->path, msg->data_length, pathname, sb.st_size); ppff();
                             if(dirname == NULL) {
                                 ppf(CLR_WARNING); printSave("WF CLIENT> Il file remoto '%s' (%d bytes) non verrà salvato perché non è stata specificata nessuna cartella (dirname = NULL).", msg->path, msg->data_length); ppff();
@@ -431,7 +436,6 @@ int writeFile(const char* pathname, const char* dirname) {
                                 ppf(CLR_INFO); printSave("WF CLIENT> File remoto '%s' (%d bytes) salvato in '%s'", msg->path, msg->data_length, percorso); ppff();
                                 
                                 fclose(filePointer);
-                                // free(msg->path); // FIXME
                                 free(msg->data);
                             }
                         }
@@ -444,6 +448,12 @@ int writeFile(const char* pathname, const char* dirname) {
                                 errno = EBADRQC;
                             }
                         }
+                        break;
+                    }
+
+                    case ANS_NO_PERMISSION: {
+                        ppf(CLR_ERROR); printSave("WF CLIENT> Il file '%s' non può essere letto perché è lockato da un altro client.", pathname); ppff();
+                        errno = EACCES;
                         break;
                     }
 
@@ -489,7 +499,7 @@ int writeFile(const char* pathname, const char* dirname) {
 
 int appendToFile(const char* pathname, void* buf, size_t size, const char* dirname) {
     // creo variabile per contenere richieste
-    Message* msg = calloc(4, sizeof(Message));
+    Message* msg = cmalloc(sizeof(Message));
     checkStop(msg == NULL, "malloc risposta");
     // fine variabile per contenere richieste
 
@@ -533,7 +543,6 @@ int appendToFile(const char* pathname, void* buf, size_t size, const char* dirna
                                 ppf(CLR_INFO); printSave("AF CLIENT> File remoto '%s' (%d bytes) salvato in '%s'", msg->path, msg->data_length, percorso); ppff();
                                 
                                 fclose(filePointer);
-                                // free(msg->path); // FIXME
                                 free(msg->data);
                             }
                         }
@@ -591,7 +600,7 @@ int appendToFile(const char* pathname, void* buf, size_t size, const char* dirna
 
 int lockFile(const char* pathname) {
     // creo variabile per contenere richieste
-    Message* msg = calloc(4, sizeof(Message));
+    Message* msg = cmalloc(sizeof(Message));
     checkStop(msg == NULL, "malloc risposta");
     // fine variabile per contenere richieste
 
@@ -644,7 +653,7 @@ int lockFile(const char* pathname) {
 
 int unlockFile(const char* pathname) {
     // creo variabile per contenere richieste
-    Message* msg = calloc(4, sizeof(Message));
+    Message* msg = cmalloc(sizeof(Message));
     checkStop(msg == NULL, "malloc risposta");
     // fine variabile per contenere richieste
 
@@ -703,7 +712,7 @@ int unlockFile(const char* pathname) {
 
 int closeFile(const char* pathname) {
     // creo variabile per contenere richieste
-    Message* msg = calloc(4, sizeof(Message));
+    Message* msg = cmalloc(sizeof(Message));
     checkStop(msg == NULL, "malloc risposta");
     // fine variabile per contenere richieste
 
@@ -721,15 +730,15 @@ int closeFile(const char* pathname) {
                         break;
                     }
 
-                    case ANS_NO_PERMISSION: {
-                        ppf(CLR_ERROR); printSave("CF CLIENT> Il file '%s' non può essere chiuso perché è lockato da un altro client.", pathname); ppff();
-                        errno = EACCES;
-                        break;
-                    }
-
                     case ANS_FILE_NOT_EXISTS: {
                         ppf(CLR_ERROR); printSave("CF CLIENT> Il file '%s' non esiste, non puoi chiuderlo.", pathname); ppff();
                         errno = ENOENT;
+                        break;
+                    }
+
+                    case ANS_NO_PERMISSION: {
+                        ppf(CLR_ERROR); printSave("CF CLIENT> Il file '%s' non può essere chiuso perché è lockato da un altro client.", pathname); ppff();
+                        errno = EACCES;
                         break;
                     }
 
@@ -765,7 +774,7 @@ int closeFile(const char* pathname) {
 
 int removeFile(const char* pathname) {
     // creo variabile per contenere richieste
-    Message* msg = calloc(4, sizeof(Message));
+    Message* msg = cmalloc(sizeof(Message));
     checkStop(msg == NULL, "malloc risposta");
     // fine variabile per contenere richieste
 
@@ -783,15 +792,15 @@ int removeFile(const char* pathname) {
                         break;
                     }
 
-                    case ANS_NO_PERMISSION: {
-                        ppf(CLR_ERROR); printSave("RF CLIENT> Il file '%s' non può essere eliminato perché è lockato da un altro client.", pathname); ppff();
-                        errno = EACCES;
-                        break;
-                    }
-
                     case ANS_FILE_NOT_EXISTS: {
                         ppf(CLR_ERROR); printSave("RF CLIENT> Il file '%s' non esiste, non puoi eliminarlo.", pathname); ppff();
                         errno = ENOENT;
+                        break;
+                    }
+
+                    case ANS_NO_PERMISSION: {
+                        ppf(CLR_ERROR); printSave("RF CLIENT> Il file '%s' non può essere eliminato perché è lockato da un altro client.", pathname); ppff();
+                        errno = EACCES;
                         break;
                     }
 

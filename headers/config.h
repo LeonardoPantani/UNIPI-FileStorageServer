@@ -33,9 +33,9 @@ typedef struct configurazione {
     int max_connections;
     int max_memory_size;
     int max_files;
-    char socket_file_name[MAX_PATH_LENGTH];
-    char log_file_name[MAX_PATH_LENGTH];
-    char stats_file_name[MAX_PATH_LENGTH];
+    char socket_file_name[PATH_MAX];
+    char log_file_name[PATH_MAX];
+    char stats_file_name[PATH_MAX];
 } Config;
 
 Config config;

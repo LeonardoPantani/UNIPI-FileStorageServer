@@ -1,21 +1,21 @@
 /**
  * @file    list.c
- * @brief   Contiene l'implementazione della coda dei client in attesa.
+ * @brief   Contiene l'implementazione della list dei client in attesa.
  * @author  Leonardo Pantani
 **/
 
 #include "list.h"
 
-List* createList(int maxClients) {
-    checkNull(maxClients <= 0, "numero di client massimi minore o uguale a 0");
+List* createList(int maxSlots) {
+    checkNull(maxSlots <= 0, "numero di slot massimi minore o uguale a 0");
     List* lista = cmalloc(sizeof(List));
-    checkNull(lista == NULL, "malloc lista client");
+    checkNull(lista == NULL, "malloc lista");
 
-    lista->array = cmalloc(maxClients*sizeof(int));
-    checkNull(lista->array == NULL, "malloc queue della lista client");
+    lista->array = cmalloc(maxSlots*sizeof(int));
+    checkNull(lista->array == NULL, "malloc queue della lista");
 
-    lista->maxClients = maxClients;
-    lista->numClients = 0;
+    lista->maxSlots = maxSlots;
+    lista->usedSlots = 0;
     lista->first = 0;
     lista->last  = 0;
     
@@ -23,33 +23,33 @@ List* createList(int maxClients) {
 }
 
 
-void deleteList(List *coda) {
-    if(coda != NULL)
-        free(coda->array);
-    free(coda);
+void deleteList(List *list) {
+    if(list != NULL)
+        free(list->array);
+    free(list);
 }
 
 
-int addToList(List *coda, int elemento) {
-    checkM1(coda == NULL, "add ad una coda che non esiste");
-    checkM1(coda->numClients >= coda->maxClients, "add ad una coda che ha raggiunto/superato il limite di client massimi");
-    coda->numClients++;
-    coda->array[coda->last] = elemento;
-    coda->last = coda->last+1;
+int addToList(List *list, int elemento) {
+    checkM1(list == NULL, "add ad una list che non esiste");
+    checkM1(list->usedSlots >= list->maxSlots, "add ad una list che ha raggiunto/superato il limite di slot massimi");
+    list->usedSlots++;
+    list->array[list->last] = elemento;
+    list->last = list->last+1;
 
     return 0;
 }
 
 
-int removeFromList(List *coda) {
-    checkM1(coda == NULL, "remove ad una coda che non esiste");
-    checkM1(coda->numClients <= 0, "remove ad una coda vuota"); 
+int removeFromList(List *list) {
+    checkM1(list == NULL, "remove ad una list che non esiste");
+    checkM1(list->usedSlots <= 0, "remove ad una list vuota"); 
 
     int preso;
 
-    preso = coda->array[coda->first];
-    coda->numClients--;
-    coda->first = coda->first+1;
+    preso = list->array[list->first];
+    list->usedSlots--;
+    list->first = list->first+1;
 
     return preso;
 }

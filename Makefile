@@ -1,16 +1,8 @@
 #
 # @file		Makefile
-# @brief	File di tipo makefile che compila e rimuove i file obsoleti.
+# @brief	File di tipo makefile che compila gli eseguibili, file oggetto, librerie statiche e rimuove i file obsoleti.
 # @author	Leonardo Pantani
 #
-
-# Bersagli phony (non sono nomi file ma una ricetta esplicita da eseguire)
-.PHONY: all client server clean test1 test2 test3
-
-CC = gcc
-CFLAGS += -g -std=c99 -Wall
-THREAD_FLAGS = -pthread
-INCLUDES = -I./headers
 
 # ------------ CARTELLE ------------ 
 # Cartella dei file oggetto
@@ -21,7 +13,25 @@ LIB_FOLDER = build/libs
 API_FOLDER = sources/api
 # Cartella delle strutture dati
 DS_FOLDER = sources/data_structures
+# Cartella delle utils
+UTL_FOLDER = sources/utils
+# Cartella degli headers
+HDR_FOLDER = headers
 
+
+# ------------- ALTRO --------------
+# Estensione del file socket da rimuovere da ovunque
+SOCKET_EXTENSION = sk
+# Bersagli phony (non sono nomi file ma una ricetta esplicita da eseguire)
+.PHONY: all client server clean test1 test2 test3
+
+
+# --------- COMPILAZIONE -----------
+CC = gcc
+CFLAGS += -g -std=c99 -Wall
+CXXFLAGS += -DDEBUG -DDEBUG_VERBOSE
+THREAD_FLAGS = -pthread
+INCLUDES = -I./$(HDR_FOLDER)
 
 # Dipendenze server e client
 server_dependencies = libs/libds.so libs/libserver.so libs/libcomm.so
@@ -30,10 +40,10 @@ client_dependencies = libs/libcomm.so libs/libapi.so
 all: clean server client
 
 server: $(server_dependencies)
-	$(CC) $(INCLUDES) $(CFLAGS) $(THREAD_FLAGS) sources/server.c -o server -DDEBUG -DDEBUG_VERBOSE -Wl,-rpath,./build/libs -L ./build/libs -lds -lserver -lcomm
+	$(CC) $(INCLUDES) $(CFLAGS) $(THREAD_FLAGS) sources/server.c -o server $(CXXFLAGS) -Wl,-rpath,./build/libs -L ./build/libs -lds -lserver -lcomm
 
 client: $(client_dependencies)
-	$(CC) $(INCLUDES) $(CFLAGS) sources/client.c -o client -DDEBUG -Wl,-rpath,./build/libs -L ./build/libs -lcomm -lapi
+	$(CC) $(INCLUDES) $(CFLAGS) sources/client.c -o client $(CXXFLAGS) -Wl,-rpath,./build/libs -L ./build/libs -lcomm -lapi
 
 
 libs/libserver.so: $(OBJECT_FOLDER)/config.o $(OBJECT_FOLDER)/statistics.o
@@ -42,7 +52,7 @@ libs/libserver.so: $(OBJECT_FOLDER)/config.o $(OBJECT_FOLDER)/statistics.o
 libs/libapi.so: $(OBJECT_FOLDER)/utils.o $(OBJECT_FOLDER)/communication.o $(OBJECT_FOLDER)/api.o
 	$(CC) -shared -o $(LIB_FOLDER)/libapi.so $^
 
-libs/libds.so: $(OBJECT_FOLDER)/list.o $(OBJECT_FOLDER)/hashtable.o
+libs/libds.so: $(OBJECT_FOLDER)/node.o $(OBJECT_FOLDER)/list.o $(OBJECT_FOLDER)/hashtable.o
 	$(CC) -shared -o $(LIB_FOLDER)/libds.so $^
 
 libs/libcomm.so: $(OBJECT_FOLDER)/utils.o $(OBJECT_FOLDER)/communication.o
@@ -50,40 +60,44 @@ libs/libcomm.so: $(OBJECT_FOLDER)/utils.o $(OBJECT_FOLDER)/communication.o
 
 
 
-$(OBJECT_FOLDER)/api.o: sources/utils/communication.c sources/api/api.c
-	$(CC) $(INCLUDES) $(CFLAGS) sources/api/api.c -c -fPIC -o $@
+$(OBJECT_FOLDER)/api.o: $(API_FOLDER)/api.c $(HDR_FOLDER)/api.h
+	$(CC) $(INCLUDES) $(CFLAGS) $(API_FOLDER)/api.c -c -fPIC -o $@
 
-$(OBJECT_FOLDER)/communication.o: sources/utils/communication.c
-	$(CC) $(INCLUDES) $(CFLAGS) sources/utils/communication.c -c -fPIC -o $@
+$(OBJECT_FOLDER)/communication.o: $(UTL_FOLDER)/communication.c $(HDR_FOLDER)/communication.h
+	$(CC) $(INCLUDES) $(CFLAGS) $(UTL_FOLDER)/communication.c -c -fPIC -o $@
 
-$(OBJECT_FOLDER)/statistics.o: sources/utils/statistics.c
-	$(CC) $(INCLUDES) $(CFLAGS) sources/utils/statistics.c -c -fPIC -o $@
+$(OBJECT_FOLDER)/statistics.o: $(UTL_FOLDER)/statistics.c $(HDR_FOLDER)/statistics.h
+	$(CC) $(INCLUDES) $(CFLAGS) $(UTL_FOLDER)/statistics.c -c -fPIC -o $@
 
-$(OBJECT_FOLDER)/config.o:
-	$(CC) $(INCLUDES) $(CFLAGS) sources/utils/config.c -c -fPIC -o $@
+$(OBJECT_FOLDER)/config.o: $(UTL_FOLDER)/config.c $(HDR_FOLDER)/config.h
+	$(CC) $(INCLUDES) $(CFLAGS) $(UTL_FOLDER)/config.c -c -fPIC -o $@
 
-$(OBJECT_FOLDER)/utils.o: sources/utils/utils.c
-	$(CC) $(INCLUDES) $(CFLAGS) sources/utils/utils.c -c -fPIC -o $@
+$(OBJECT_FOLDER)/utils.o: $(UTL_FOLDER)/utils.c $(HDR_FOLDER)/utils.h
+	$(CC) $(INCLUDES) $(CFLAGS) $(UTL_FOLDER)/utils.c -c -fPIC -o $@
 
-$(OBJECT_FOLDER)/list.o:
-	$(CC) $(INCLUDES) $(CFLAGS) sources/data_structures/list.c -c -fPIC -o $@
+$(OBJECT_FOLDER)/node.o: $(DS_FOLDER)/node.c $(HDR_FOLDER)/node.h
+	$(CC) $(INCLUDES) $(CFLAGS) $(DS_FOLDER)/node.c -c -fPIC -o $@
 
-$(OBJECT_FOLDER)/hashtable.o:
-	$(CC) $(INCLUDES) $(CFLAGS) sources/data_structures/hashtable.c -c -fPIC -o $@
+$(OBJECT_FOLDER)/list.o: $(DS_FOLDER)/list.c $(HDR_FOLDER)/list.h
+	$(CC) $(INCLUDES) $(CFLAGS) $(DS_FOLDER)/list.c -c -fPIC -o $@
 
-#######
+$(OBJECT_FOLDER)/hashtable.o: $(DS_FOLDER)/hashtable.c $(HDR_FOLDER)/hashtable.h
+	$(CC) $(INCLUDES) $(CFLAGS) $(DS_FOLDER)/hashtable.c -c -fPIC -o $@
+
+
+# ------------- TARGET PHONY --------------
 clean:
 	rm -f -rf build
 	rm -f -rf TestDirectory/output/Client/*.txt
 	rm -f -rf TestDirectory/output/Client/flushati/*.*
 	rm -f -rf TestDirectory/output/Client/salvati/*.*
 	rm -f -rf TestDirectory/output/Server/*.txt
-	rm -f *.sk
+	rm -f *.$(SOCKET_EXTENSION)
 	rm -f server
 	rm -f client
 	mkdir build
-	mkdir build/objects
-	mkdir build/libs
+	mkdir $(OBJECT_FOLDER)
+	mkdir $(LIB_FOLDER)
 
 
 test1:

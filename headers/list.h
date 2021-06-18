@@ -1,6 +1,6 @@
 /**
  * @file    list.h
- * @brief   Contiene l'header dei metodi utilizzati per la coda di client.
+ * @brief   Contiene l'header dei metodi della struttura dati list.
  * @author  Leonardo Pantani
 **/
 
@@ -16,43 +16,43 @@ typedef struct {
     int first;
     int last;
     int *array;
-    int maxClients;
-    int numClients;
+    int maxSlots;
+    int usedSlots;
 } List;
 
 /**
- * @brief Crea una coda di al massimo numClients.
+ * @brief Crea una lista di al massimo usedSlots
  * 
- * @param numClients    Numero di posti nella coda
+ * @param usedSlots    Numero di posti nella lista
  * 
- * @returns Puntatore alla coda creata, NULL in caso di errore
+ * @returns Puntatore alla lista creata, NULL in caso di errore
 **/
-List* createList(int numClients);
+List* createList(int usedSlots);
 
 /**
- * @brief Elimina una coda di client.
+ * @brief Elimina una lista
  * 
- * @param coda  La coda su cui eseguire la free
+ * @param list  La lista su cui eseguire la free
 **/
-void deleteList(List *coda);
+void deleteList(List *list);
 
 /**
- * @brief Aggiunge un elemento alla coda.
+ * @brief Aggiunge un elemento alla lista
  * 
- * @param coda      La coda a cui aggiungere un elemento
+ * @param list      La lista a cui aggiungere un elemento
  * @param elemento  L'elemento da aggiungere
  * 
  * @returns 1 in caso di successo, 0 in caso di fallimento
 **/
-int addToList(List *coda, int elemento);
+int addToList(List *list, int elemento);
 
 /**
- * @brief Rimuove il primo elemento dalla coda
+ * @brief Rimuove il primo elemento dalla lista
  * 
- * @param coda      La coda da cui rimuovere l'elemento
+ * @param list  La lista da cui rimuovere l'elemento
  * 
  * @returns 1 in caso di successo, 0 in caso di fallimento
 **/
-int removeFromList(List *coda);
+int removeFromList(List *list);
 
 #endif /* LIST_H_ */

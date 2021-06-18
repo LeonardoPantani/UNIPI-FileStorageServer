@@ -40,23 +40,14 @@ int chiusuraForte  = FALSE;
 int chiusuraDebole = FALSE;
 pthread_mutex_t mutexChiusura = PTHREAD_MUTEX_INITIALIZER;
 
-void* findOldFile(hashtable_t* hasht) {
-    File* el, *old;
+
+char* findOldFile(hashtable_t hasht) {
 	hash_elem_it it2 = HT_ITERATOR(ht);
 	char* k = ht_iterate_keys(&it2);
 
-    old = ht_get(ht, k);
-    k = ht_iterate_keys(&it2);
-	while(k != NULL) {
-        el = ht_get(ht, k);
-        if(el->updatedDate < old->updatedDate) { // il file vecchio adesso è el
-            *old = *el;
-        }
-		k = ht_iterate_keys(&it2);
-	}
-
-    return old;
+    return k;
 }
+
 
 static int checkLimits(Message* msg, int which) {
     if(stats.current_bytes_used + msg->data_length > config.max_memory_size && (which == 1 || which == 3)) { // l'inserimento del file causerebbe sforamento limiti memoria
@@ -66,6 +57,67 @@ static int checkLimits(Message* msg, int which) {
     } else { // l'inserimento del file non causerebbe problemi
         return 0;
     }
+}
+
+
+int expellFiles(Message* msg, int socketConnection, int numGestoreConnessione, int controllo) {
+    int i = 0;
+
+    // creo variabile per contenere richieste
+    Message* risposta = cmalloc(sizeof(Message));
+    checkStop(risposta == NULL, "malloc risposta");
+    // fine variabile per contenere richieste
+
+    setMessage(risposta, ANS_UNKNOWN, 0, NULL, NULL, 0);
+
+    int esitoControllo = checkLimits(msg, controllo);
+    
+    if(esitoControllo != 0) {
+        ppf(CLR_HIGHLIGHT); printSave("GC %d > Controllo limitazioni con ID %d", numGestoreConnessione, controllo); ppff();
+        setMessage(risposta, ANS_STREAM_START, 0, NULL, NULL, 0);
+        checkStop(sendMessage(socketConnection, risposta) == -1, "errore invio messaggio inizio flush");
+
+        do {
+            char* chiave = findOldFile(*ht);
+            File* oldFile = ht_get(ht, chiave);
+            
+            // aggiornamento statistiche
+            locka(mutexStatistiche);
+            stats.current_files_saved--;
+            stats.current_bytes_used = stats.current_bytes_used - oldFile->data_length;
+            stats.n_replace_applied++;
+            unlocka(mutexStatistiche);
+            
+            ppf(CLR_ERROR); printSave("GC %d > File '%s' (%zu bytes) eliminato, sostituito da '%s'", numGestoreConnessione, oldFile->path, oldFile->data_length, msg->path); fflush(stdout); ppff();
+            
+            setMessage(risposta, ANS_STREAM_FILE, 0, oldFile->path, oldFile->data, oldFile->data_length);
+            checkStop(sendMessage(socketConnection, risposta) == -1, "errore invio messaggio con file flushato");
+
+            free(ht_remove(ht, oldFile->path));
+            i++;
+        } while((esitoControllo = checkLimits(msg, controllo)) != 0);
+
+        setMessage(risposta, ANS_STREAM_END, 0, NULL, NULL, 0);
+        checkStop(sendMessage(socketConnection, risposta) == -1, "errore invio messaggio fine flush");
+    }
+
+    free(risposta);
+
+    return i;
+}
+
+
+void printFiles() {
+    ppf(CLR_WARNING); printf("------- LISTA ELEMENTI -------\n"); ppff();
+    hash_elem_it it = HT_ITERATOR(ht);
+    char* k = ht_iterate_keys(&it);
+    while(k != NULL) {
+        File* el = (File *)ht_get(ht, k);
+        printSave("CHIAVE: %-10s | AUTORE: %-5d (aperto da %d) | DATA AGGIORNAMENTO: %-10ld | SPAZIO OCCUPATO: %-10ld", k, el->author, el->openBy, el->updatedDate, el->data_length);
+        fflush(stdout);
+        k = ht_iterate_keys(&it);
+    }
+    ppf(CLR_WARNING); printf("------ FINE LISTA ELEMENTI ------\n"); ppff();
 }
 
 
@@ -80,193 +132,129 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
     File* el = (File *)ht_get(ht, msg->path);
 
     switch(msg->action) {
-        case REQ_OPEN: { // O_CREATE = 1 | O_LOCK = 2 | O_CREATE && O_LOCK = 3
-            if(msg->path == NULL) { // controllo che il path non sia vuoto
-                setMessage(risposta, ANS_BAD_RQST, 0, NULL, NULL, 0);
-                ppf(CLR_ERROR); printSave("GC %d > Il client %d ha mandato una OPEN con path nullo.\n", numero, socketConnection); ppff();
-                break;
-            }
-
-            /* =========== CONTROLLO CHE LE FLAG SIANO UTILIZZATE CORRETTAMENTE ================== */
-            if(el != NULL && (msg->flags == 1 || msg->flags == 3)) { // viene fatta una create con un path che esiste già
-                setMessage(risposta, ANS_FILE_EXISTS, 0, NULL, NULL, 0);
-                ppf(CLR_ERROR); printSave("GC %d > Impossibile aggiungere file '%s' nella hash table: esiste già", numero, msg->path); ppff();
-                break;
-            } else if (msg->flags == 2 && el == NULL) { // viene fatta la lock su un file che non esiste ancora
-                setMessage(risposta, ANS_FILE_NOT_EXISTS, 0, NULL, NULL, 0);
-                ppf(CLR_ERROR); printSave("GC %d > Impossibile aggiungere file '%s' nella hash table: lock su file che non esiste", numero, msg->path); ppff();
-                break;
-            }
-            /* =========== CONTROLLO NUMERO FILE ================== */
-            if(msg->flags != 2) { // se richiesta è solo una open con lock allora non c'è bisogno di controllare se sforo il limite di file inseriti
-                int controllo = checkLimits(msg, 2), pulizia = FALSE;
-                
-                if(controllo != 0) {
-                    ppf(CLR_HIGHLIGHT); printSave("GC %d > Controllo limitazioni: NUMERO FILE", numero); ppff();
-                    setMessage(risposta, ANS_STREAM_START, 0, NULL, NULL, 0);
-                    checkStop(sendMessage(socketConnection, risposta) == -1, "errore invio messaggio inizio flush");
-                }
-
-                while(controllo != 0 && ht->e_num != 0) { // devo vedere se il numero di file non è 0 altrimenti non riesco a trovare un valore vecchio sotto ed esplodo
-                    pulizia = TRUE;
-                    File* oldFile = (File *)findOldFile(ht);
-                    
-                    // --- Aggiornamento statistiche (file_salvati-- | dati_usati-- | replace_applicati++)
-                    locka(mutexStatistiche);
-                    stats.current_files_saved--;
-                    stats.current_bytes_used = stats.current_bytes_used - oldFile->data_length;
-                    stats.n_replace_applied++;
-                    unlocka(mutexStatistiche);
-                    ppf(CLR_ERROR); printSave("GC %d > File '%s' (%zu bytes) eliminato per inserire '%s' nella HT: avrei raggiunto il limite di %d file", numero, oldFile->path, oldFile->data_length, msg->path, config.max_files); fflush(stdout); ppff();
-
-                    setMessage(risposta, ANS_STREAM_FILE, 0, oldFile->path, oldFile->data, oldFile->data_length);
-                    checkStop(sendMessage(socketConnection, risposta) == -1, "errore invio messaggio con file flushato");
-
-                    free(ht_remove(ht, oldFile->path));
-
-                    // rieseguo controllo
-                    controllo = checkLimits(msg, 2);
-                }
-
-                if(pulizia) {
-                    setMessage(risposta, ANS_STREAM_END, 0, NULL, NULL, 0);
-                    checkStop(sendMessage(socketConnection, risposta) == -1, "errore invio messaggio fine flush");
-                }
-            }
-            /* =========== FINE CONTROLLO NUMERO FILE ================== */
-
-            /* =========== CREO O APRO FILE (CON LOCK O SENZA LOCK) ================== */
-            el = ht_get(ht, msg->path);
-            File* f = cmalloc(sizeof(File));
-            // imposto l'autore sulla connessione del socket
-            f->author = socketConnection;
-            // imposto la data di aggiornamento a ora
-            f->updatedDate = (unsigned long)time(NULL);
-            // imposto l'ultima azione su una open
-            f->lastAction = REQ_OPEN;
-            // imposto il percorso del file
-            strcpy(f->path, msg->path);
-            // imposto la dimensione del dato iniziale su 0
-            f->data_length = 0;
-            
-            
+        case REQ_OPEN: {
             switch(msg->flags) {
-                case 1: { // file creato e aperto (no lock)
-                    f->lock = -1;
-
-                    checkStop(ht_put(ht, msg->path, f) == HT_ERROR, "creazione e apertura file senza lock");
-                    ppf(CLR_SUCCESS); printSave("GC %d > File '%s' inserito nella hash table.", numero, msg->path); ppff();
-                    break;
-                }
-
-                case 2: { // file aperto (lock)
-                    if(el != NULL) {
-                        el->lock = socketConnection;
-                    } else {
-                        f->lock = socketConnection;
-                        ppf(CLR_WARNING); printSave("GC %d > Il client ha fatto una lock su un file che è stato cancellato. Lo creo e apro in lock.", numero); ppff();
-                        checkStop(ht_put(ht, msg->path, f) == HT_ERROR, "creazione e apertura file senza lock");
+                case 0: { // file aperto e basta
+                    if(el == NULL) {
+                        setMessage(risposta, ANS_FILE_NOT_EXISTS, 0, NULL, NULL, 0);
+                        ppf(CLR_ERROR); printSave("GC %d > Impossibile aprire file '%s' nella hash table: file inesistente", numero, msg->path); ppff();
+                        break;
                     }
-                    
-                    ppf(CLR_SUCCESS); printSave("GC %d > File '%s' aperto e bloccato nella hash table.", numero, msg->path); ppff();
-                    break;
-                }
 
-                case 3: { // file creato e aperto (lock)
-                    f->lock = socketConnection;
-                    checkStop(ht_put(ht, msg->path, f) == HT_ERROR, "creazione e apertura file con lock");
-                    ppf(CLR_SUCCESS); printSave("GC %d > File '%s' creato e aperto nella hash table.", numero, msg->path); ppff();
+                    if(el->openBy != -1 && el->openBy != socketConnection) {
+                        setMessage(risposta, ANS_NO_PERMISSION, 0, NULL, NULL, 0);
+                        ppf(CLR_ERROR); printSave("GC %d > Impossibile aprire file '%s' nella hash table: è aperto da qualcun altro", numero, msg->path); ppff();
+                        break;
+                    }
+
+                    // modifiche a file
+                    el->openBy = socketConnection;
+                    el->updatedDate = (unsigned long)time(NULL);
+                    el->lastAction = REQ_OPEN;
+
+                    // aggiorno le statistiche all'immissione di un file
                     locka(mutexStatistiche);
                     stats.n_openlock++;
+                    if(stats.current_files_saved > stats.max_file_number_reached) stats.max_file_number_reached = stats.current_files_saved;
                     unlocka(mutexStatistiche);
+
+                    setMessage(risposta, ANS_OK, 0, NULL, NULL, 0);
+                    ppf(CLR_SUCCESS); printSave("GC %d > File '%s' aperto dalla hash table", numero, msg->path); ppff();
+                    break;
+                }
+
+                case 1: { // file creato e aperto
+                    if(el != NULL) {
+                        setMessage(risposta, ANS_FILE_EXISTS, 0, NULL, NULL, 0);
+                        ppf(CLR_ERROR); printSave("GC %d > Impossibile creare file '%s' nella hash table: esiste già", numero, msg->path); ppff();
+                        break;
+                    }
+
+                    /* =========== CONTROLLO NUMERO FILE ================== */
+                    expellFiles(msg, socketConnection, numero, 2);
+                    /* =========== FINE CONTROLLO NUMERO FILE ================== */
+
+                    // modifiche a file
+                    File* f = cmalloc(sizeof(File));
+                    f->openBy = socketConnection;
+                    f->author = socketConnection;
+                    f->updatedDate = (unsigned long)time(NULL);
+                    f->lastAction = REQ_OPEN;
+                    strcpy(f->path, msg->path);
+                    checkStop(ht_put(ht, msg->path, f) == HT_ERROR, "creazione e apertura file senza lock");
+
+                    // aggiornamento statistiche
+                    locka(mutexStatistiche);
+                    stats.n_openlock++;
+                    stats.current_files_saved++;
+                    if(stats.current_files_saved > stats.max_file_number_reached) stats.max_file_number_reached = stats.current_files_saved;
+                    unlocka(mutexStatistiche);
+
+                    setMessage(risposta, ANS_OK, 0, NULL, NULL, 0);
+                    ppf(CLR_SUCCESS); printSave("GC %d > File '%s' inserito nella hash table", numero, msg->path); ppff();
                     break;
                 }
 
                 default: {
                     setMessage(risposta, ANS_UNKNOWN, 0, NULL, NULL, 0);
-                    ppf(CLR_ERROR); printSave("GC %d > Flag non valida!", numero); ppff();
+                    ppf(CLR_ERROR); printSave("GC %d > Flag impostata '%d' non valida o non supportata", msg->flags, numero); ppff();
                 }
             }
-            setMessage(risposta, ANS_OK, 0, NULL, NULL, 0);
-
-
-            // aggiorno le statistiche all'immissione di un file
-            locka(mutexStatistiche);
-            stats.current_files_saved++;
-            if(stats.current_files_saved > stats.max_file_number_reached) stats.max_file_number_reached = stats.current_files_saved;
-            unlocka(mutexStatistiche);
             break;
         }
 
         case REQ_READ: {
             if(el == NULL) { // il file non esiste
-                ppf(CLR_ERROR); printSave("GC %d > File '%s' non trovato, invio messaggio di errore.", numero, msg->path); ppff();
                 setMessage(risposta, ANS_FILE_NOT_EXISTS, 0, NULL, NULL, 0);
+                ppf(CLR_ERROR); printSave("GC %d > File '%s' non trovato, impossibile leggerlo", numero, msg->path); ppff();
                 break;
             }
 
-            if(el->lock == -1 || el->lock == socketConnection) {
-                ppf(CLR_SUCCESS); printSave("GC %d > File '%s' trovato!", numero, msg->path); ppff();
-                setMessage(risposta, ANS_OK, 0, msg->path, el->data, el->data_length);
-            } else {
-                ppf(CLR_WARNING); printSave("GC %d > File '%s' trovato, ma il client %d non ne possiede i diritti di lettura/scrittura.", numero, msg->path, socketConnection); ppff();
-                setMessage(risposta, ANS_NO_PERMISSION, 0, NULL, NULL, 0);
-            }
+            // modifiche a file
+            el->updatedDate = (unsigned long)time(NULL);
+            el->lastAction = REQ_READ;
 
+            // aggiornamento statistiche
             locka(mutexStatistiche);
             stats.n_read++;
             stats.bytes_read += el->data_length;
             unlocka(mutexStatistiche);
+
+            setMessage(risposta, ANS_OK, 0, msg->path, el->data, el->data_length);
+            ppf(CLR_SUCCESS); printSave("GC %d > File '%s' trovato, invio", numero, msg->path); ppff();
             break;
         }
 
         case REQ_WRITE: {
-            if(el == NULL || el->lock != socketConnection || el->data_length != 0) {
+            if(el == NULL) {
+                setMessage(risposta, ANS_FILE_NOT_EXISTS, 0, NULL, NULL, 0);
+                ppf(CLR_ERROR); printSave("GC %d > File '%s' non trovato, impossibile scriverci.", numero, msg->path); ppff();
+                break;
+            }
+
+            if(el->lastAction != REQ_OPEN || el->data_length != 0) {
                 setMessage(risposta, ANS_BAD_RQST, 0, NULL, NULL, 0);
                 ppf(CLR_ERROR); printSave("GC %d > File '%s' non appena creato, impossibile scriverci.", numero, msg->path); ppff();
                 break;
             }
-            /* =========== CONTROLLO LIMITE MEMORIA ================== */
-            int controllo = checkLimits(msg, 1), pulizia = FALSE;
+
+            if(el->openBy != -1 && el->openBy != socketConnection) {
+                setMessage(risposta, ANS_NO_PERMISSION, 0, NULL, NULL, 0);
+                ppf(CLR_ERROR); printSave("GC %d > Impossibile scrivere sul file '%s' nella hash table perché è aperto da qualcun altro", numero, msg->path); ppff();
+                break;
+            }
+
+            /* =========== CONTROLLO SFORAMENTO MEMORIA ================== */
+            expellFiles(msg, socketConnection, numero, 1);
+            /* =========== FINE CONTROLLO SFORAMENTO MEMORIA ============= */
             
-            if(controllo != 0) {
-                ppf(CLR_HIGHLIGHT); printSave("GC %d > Controllo limitazioni: SFORAMENTO LIMITE FILE", numero); ppff();
-                setMessage(risposta, ANS_STREAM_START, 0, NULL, NULL, 0);
-                checkStop(sendMessage(socketConnection, risposta) == -1, "errore invio messaggio inizio flush");
-            }
-
-            while(controllo != 0 && ht->e_num != 0) { // devo vedere se il numero di file non è 0 altrimenti non riesco a trovare un valore vecchio sotto ed esplodo
-                pulizia = TRUE;
-                File* e = (File *)ht_get(ht, msg->path);
-
-                // --- Aggiornamento statistiche (file_salvati-- | dati_usati-- | replace_applicati++)
-                locka(mutexStatistiche);
-                stats.current_files_saved--;
-                stats.current_bytes_used = stats.current_bytes_used - e->data_length;
-                stats.n_replace_applied++;
-                unlocka(mutexStatistiche);
-                ppf(CLR_ERROR); printSave("GC %d > File '%s' (%zu bytes) eliminato per scrivere '%s' nella HT: avrei sforato (%d bytes) il limite di %d bytes", numero, e->path, e->data_length, msg->path, (msg->data_length+stats.current_bytes_used), config.max_memory_size); fflush(stdout); ppff();
-
-                setMessage(risposta, ANS_STREAM_FILE, 0, e->path, e->data, e->data_length);
-                checkStop(sendMessage(socketConnection, risposta) == -1, "errore invio messaggio con file flushato");
-
-                free(ht_remove(ht, e->path));
-                free(e);
-
-                // rieseguo controllo
-                controllo = checkLimits(msg, 1);
-            }
-
-            if(pulizia) {
-                setMessage(risposta, ANS_STREAM_END, 0, NULL, NULL, 0);
-                checkStop(sendMessage(socketConnection, risposta) == -1, "errore invio messaggio fine flush");
-            }
-            /* =========== FINE CONTROLLO MEMORIA ================== */
-            
+            // modifiche a file
             el->data = msg->data;
             el->data_length = msg->data_length;
+            el->updatedDate = (unsigned long)time(NULL);
+            el->lastAction = REQ_WRITE;
 
-            // aggiorno le statistiche all'immissione di un file
+            // aggiornamento statistiche
             locka(mutexStatistiche);
             stats.current_bytes_used += msg->data_length;
             if(stats.current_bytes_used > stats.max_size_reached) stats.max_size_reached = stats.current_bytes_used;
@@ -275,15 +263,14 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
             unlocka(mutexStatistiche);
 
             setMessage(risposta, ANS_OK, 0, NULL, NULL, 0);
-            ppf(CLR_SUCCESS); printSave("GC %d > File '%s' scritto nella hashtable.", numero, msg->path); ppff();
-
+            ppf(CLR_SUCCESS); printSave("GC %d > File '%s' scritto nella hashtable", numero, msg->path); ppff();
             break;
         }
 
         case REQ_READ_N: {
             if(ht->e_num == 0) {
                 setMessage(risposta, ANS_FILE_NOT_EXISTS, 0, NULL, NULL, 0);
-                ppf(CLR_ERROR); printSave("GC %d > Non ci sono file da mandare. Invio messaggio di errore.", numero); ppff();
+                ppf(CLR_ERROR); printSave("GC %d > Non ci sono file da mandare, invio messaggio di errore.", numero); ppff();
                 break;
             }
 
@@ -291,14 +278,21 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
             checkStop(sendMessage(socketConnection, risposta) == -1, "errore invio messaggio di inizio invio file multipli");
 
             int i = 0, bytes_letti = 0;
+
             hash_elem_it it = HT_ITERATOR(ht);
             char* k = ht_iterate_keys(&it);
             File* e = (File *)ht_get(ht, k);
+
             // mando un insieme di file, solo quelli per i quali il client ha i permessi di accesso
-            while(e != NULL && (i < *msg->data || *msg->data == -1) && (e->lock == -1 || e->lock == socketConnection)) {
+            while(e != NULL && (i < *msg->data || *msg->data == -1)) {
+                // modifiche a file
+                e->updatedDate = (unsigned long)time(NULL);
+                e->lastAction = REQ_READ_N;
+
                 setMessage(risposta, ANS_STREAM_FILE, 0, e->path, e->data, e->data_length);
                 checkStop(sendMessage(socketConnection, risposta) == -1, "errore invio messaggio con file inviato (multiplo)");
-                ppf(CLR_SUCCESS); printSave("GC %d > File '%s' inviato.", numero, e->path); ppff();
+                
+                ppf(CLR_SUCCESS); printSave("GC %d > File '%s' inviato", numero, e->path); ppff();
 
                 bytes_letti += e->data_length;
                 i++;
@@ -307,136 +301,104 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
             }
 
             setMessage(risposta, ANS_STREAM_END, 0, NULL, NULL, 0);
+            checkStop(sendMessage(socketConnection, risposta) == -1, "errore invio messaggio fine file");
             free(msg->data);
 
+            // aggiornamento statistiche
             locka(mutexStatistiche);
             stats.n_read += i;
             stats.bytes_read += bytes_letti;
             unlocka(mutexStatistiche);
-
+            
+            setMessage(risposta, ANS_OK, 0, NULL, NULL, 0);
             break;
         }
 
         case REQ_CLOSE: {
-            if(el->lock != -1 && el->lock != socketConnection) { // puoi chiudere file solo se non c'ha lock oppure se c'è ed è fatto dallo stesso client
-                setMessage(risposta, ANS_NO_PERMISSION, 0, NULL, NULL, 0);
-                ppf(CLR_WARNING); printSave("GC %d > Il file '%s' non appartiene al client che ne ha richiesto la chiusura.", numero, msg->path); ppff();
+            if(el == NULL) {
+                setMessage(risposta, ANS_FILE_NOT_EXISTS, 0, NULL, NULL, 0);
+                ppf(CLR_ERROR); printSave("GC %d > File '%s' non trovato, impossibile chiuderlo.", numero, msg->path); ppff();
                 break;
             }
 
-            el->lock = -1;
-            setMessage(risposta, ANS_OK, 0, NULL, NULL, 0);
-            ppf(CLR_SUCCESS); printSave("GC %d > File '%s' chiuso.", numero, msg->path); ppff();
+            if(el->openBy != -1 && el->openBy != socketConnection) { // il client può chiudere i suoi file e file non aperti (non cambia niente)
+                setMessage(risposta, ANS_NO_PERMISSION, 0, NULL, NULL, 0);
+                ppf(CLR_WARNING); printSave("GC %d > Il file '%s' non appartiene al client che ne ha richiesto la chiusura", numero, msg->path); ppff();
+                break;
+            }
 
+            // modifiche a file
+            el->openBy = -1;
+            el->updatedDate = (unsigned long)time(NULL);
+            el->lastAction = REQ_CLOSE;
+
+            // aggiornamento statistiche
             locka(mutexStatistiche);
             stats.n_close++;
             unlocka(mutexStatistiche);
 
+            setMessage(risposta, ANS_OK, 0, NULL, NULL, 0);
+            ppf(CLR_SUCCESS); printSave("GC %d > File '%s' chiuso", numero, msg->path); ppff();
             break;
         }
 
         case REQ_DELETE: {
             if(el == NULL) { // il file da eliminare non esiste
                 setMessage(risposta, ANS_FILE_NOT_EXISTS, 0, NULL, NULL, 0);
-                ppf(CLR_ERROR); printSave("GC %d > Il file '%s' non esiste. Impossibile eliminarlo.", numero, msg->path); ppff();
+                ppf(CLR_ERROR); printSave("GC %d > Il file '%s' non esiste, impossibile eliminarlo", numero, msg->path); ppff();
                 break;
             }
-            if(el->lock != -1 && el->lock != socketConnection) { // fallisce se non è lockato oppure non è lockato dal client che ne ha richiesto l'eliminazione
+
+            if(el->openBy != -1 && el->openBy != socketConnection) { // il client può eliminare file non aperti da nessuno o i file aperti da lui
                 setMessage(risposta, ANS_NO_PERMISSION, 0, NULL, NULL, 0);
-                ppf(CLR_WARNING); printSave("GC %d > Il file '%s' non appartiene al client che ne ha richiesto l'eliminazione.", numero, msg->path); ppff();
+                ppf(CLR_WARNING); printSave("GC %d > Il file '%s' non appartiene al client che ne ha richiesto l'eliminazione", numero, msg->path); ppff();
                 break;
             }
 
-            if(el->codaRichiedentiLock != NULL) {
-                el->lock = -1;
-                checkStop(pthread_cond_broadcast(&el->rilascioLock) != 0, "risveglio client in attesa delete")
-            }
+            // modifiche a file
+            free(ht_remove(ht, msg->path));
 
-            // --- Aggiornamento statistiche (file_salvati-- | dati_usati-- | replace_applicati++ | n_delete++)
+            // aggiornamento statistiche
             locka(mutexStatistiche);
             stats.current_files_saved--;
             stats.current_bytes_used = stats.current_bytes_used - el->data_length;
             stats.n_replace_applied++;
             stats.n_delete++;
             unlocka(mutexStatistiche);
-            
-            free(ht_remove(ht, msg->path));
+
             setMessage(risposta, ANS_OK, 0, NULL, NULL, 0);
-            ppf(CLR_SUCCESS); printSave("GC %d > File '%s' eliminato.", numero, msg->path); ppff();
+            ppf(CLR_SUCCESS); printSave("GC %d > File '%s' eliminato", numero, msg->path); ppff();
             break;
         }
 
         case REQ_APPEND: {
-            if(el->lastAction != REQ_OPEN || el->lock != socketConnection) { // se il file non è lockato sull'owner attuale
-                setMessage(risposta, ANS_NO_PERMISSION, 0, NULL, NULL, 0);
-                ppf(CLR_ERROR); printSave("GC %d > File '%s' non appena creato, impossibile scriverci.", numero, msg->path); ppff();
+            if(el == NULL) {
+                setMessage(risposta, ANS_FILE_NOT_EXISTS, 0, NULL, NULL, 0);
+                ppf(CLR_ERROR); printSave("GC %d > File '%s' non trovato, impossibile scriverci.", numero, msg->path); ppff();
                 break;
             }
-            /* =========== CONTROLLO LIMITE MEMORIA ================== */
-            int controllo = checkLimits(msg, 1), pulizia = FALSE;
-            
-            if(controllo != 0) {
-                ppf(CLR_HIGHLIGHT); printSave("GC %d > Controllo limitazioni: SFORAMENTO MEMORIA", numero); fflush(stdout);
-                setMessage(risposta, ANS_STREAM_START, 0, NULL, NULL, 0);
-                checkStop(sendMessage(socketConnection, risposta) == -1, "errore invio messaggio inizio flush");
+
+            if(el->openBy != -1 && el->openBy != socketConnection) {
+                setMessage(risposta, ANS_NO_PERMISSION, 0, NULL, NULL, 0);
+                ppf(CLR_ERROR); printSave("GC %d > Impossibile scrivere sul file '%s' nella hash table perché è aperto da qualcun altro", numero, msg->path); ppff();
+                break;
             }
 
-            while(controllo != 0 && ht->e_num != 0) { // devo vedere se il numero di file non è 0 altrimenti non riesco a trovare un valore vecchio sotto ed esplodo
-                pulizia = TRUE;
-                File* e = (File *)ht_get(ht, msg->path);
+            /* =========== CONTROLLO SFORAMENTO MEMORIA ================== */
+            expellFiles(msg, socketConnection, numero, 1);
+            /* =========== FINE CONTROLLO SFORAMENTO MEMORIA ============= */
 
-                // --- Aggiornamento statistiche (file_salvati-- | dati_usati-- | replace_applicati++)
-                locka(mutexStatistiche);
-                stats.current_files_saved--;
-                stats.current_bytes_used = stats.current_bytes_used - e->data_length;
-                stats.n_replace_applied++;
-                unlocka(mutexStatistiche);
-                ppf(CLR_ERROR); printSave("GC %d > File '%s' (%zu bytes) eliminato per fare la append su '%s' nella HT: avrei sforato (%d bytes) il limite di %d bytes", numero, e->path, e->data_length, msg->path, (msg->data_length+stats.current_bytes_used), config.max_memory_size); fflush(stdout); ppff();
-
-                setMessage(risposta, ANS_STREAM_FILE, 0, e->path, e->data, e->data_length);
-                checkStop(sendMessage(socketConnection, risposta) == -1, "errore invio messaggio con file flushato");
-
-                printf("ciao\n");
-                free(ht_remove(ht, e->path));
-                free(e);
-                printf("come stai\n");
-
-                // rieseguo controllo
-                controllo = checkLimits(msg, 1);
-            }
-
-            if(pulizia) {
-                setMessage(risposta, ANS_STREAM_END, 0, NULL, NULL, 0);
-                checkStop(sendMessage(socketConnection, risposta) == -1, "errore invio messaggio fine flush");
-            }
-            /* =========== FINE CONTROLLO MEMORIA ================== */
-
-            
+            // modifiche a file
             void* dato = cmalloc(el->data_length+msg->data_length);
             memcpy(dato, el->data, el->data_length);
             memcpy((char*)dato+(el->data_length), msg->data, msg->data_length);
-
-            
-            File* f = cmalloc(sizeof(File));
-            // imposto l'autore sulla connessione del socket
-            f->author = el->author;
-            // imposto la data di aggiornamento a ora
-            f->updatedDate = (unsigned long)time(NULL);
-            // imposto l'ultima azione su una append
-            f->lastAction = REQ_APPEND;
-            // imposto il percorso del file
-            strcpy(f->path, msg->path);
-            // imposto la dimensione del dato iniziale su 0
-            f->data_length = el->data_length+msg->data_length;
-            // imposto il dato su dato
-            f->data = dato;
-            
-            checkStop(ht_put(ht, msg->path, f) == HT_ERROR, "append file");
-
+            el->data = dato;
+            el->data_length = el->data_length+msg->data_length;
+            el->updatedDate = (unsigned long)time(NULL);
+            el->lastAction = REQ_APPEND;
 
             // aggiorno le statistiche all'immissione di un file
             locka(mutexStatistiche);
-            // aggiorno i byte usati
             stats.current_bytes_used = stats.current_bytes_used + msg->data_length;
             if(stats.current_bytes_used > stats.max_size_reached) stats.max_size_reached = stats.current_bytes_used;
             stats.n_write++;
@@ -454,7 +416,7 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
         }
     }
 
-    #ifdef DEBUG_VERBOSE
+    #ifdef DEBUG_VERBOSEE
     ppf(CLR_WARNING); printSave("------- LISTA ELEMENTI -------"); ppff();
 	hash_elem_it it2 = HT_ITERATOR(ht);
 	char* k = ht_iterate_keys(&it2);
@@ -481,7 +443,7 @@ void* gestoreConnessione(void* n) {
     while(TRUE) {
         locka(mutexCodaClient);
         locka(mutexChiusura);
-        while(coda_client->numClients == 0 || chiusuraDebole || chiusuraForte) {
+        while(coda_client->usedSlots == 0 || chiusuraDebole || chiusuraForte) {
             if(chiusuraDebole || chiusuraForte) {
                 unlocka(mutexChiusura);
                 unlocka(mutexCodaClient);
@@ -532,7 +494,7 @@ void* gestoreConnessione(void* n) {
         // qui inizia la comunicazione dopo la conferma dei messaggi WELCOME ED HELLO
         while((esito = readMessage(socketConnection, msg)) == 0) {
             stats.workerRequests[numero]++;
-            ppf(CLR_INFO); printSave("GC %d > Arrivata richiesta di tipo: %d!", numero, msg->action); ppff();
+            ppf(CLR_INFO); printSave("GC %d > Arrivata richiesta di tipo: %s", numero, getRequestName(msg->action)); ppff();
 
             // controllo se c'è un segnale di terminazione
             locka(mutexChiusura);
@@ -656,16 +618,7 @@ void *attesaSegnali(void* statFile) {
         }
 
         if(segnale == SIGUSR1) {
-            ppf(CLR_WARNING); printf("------- LISTA ELEMENTI -------\n"); ppff();
-            hash_elem_it it = HT_ITERATOR(ht);
-            char* k = ht_iterate_keys(&it);
-            while(k != NULL) {
-                File* el = (File *)ht_get(ht, k);
-                printSave("CHIAVE: %s | AUTORE: %d (%d) | DATA AGGIORNAMENTO: %ld | SPAZIO OCCUPATO: %ld", k, el->author, el->lock, el->updatedDate, el->data_length);
-                fflush(stdout);
-                k = ht_iterate_keys(&it);
-            }
-            ppf(CLR_WARNING); printf("------ FINE LISTA ELEMENTI ------\n"); ppff();
+            printFiles();
         }
 
         if(segnale == SIGUSR2) {
