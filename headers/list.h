@@ -42,7 +42,7 @@ void deleteList(List *list);
  * @param list      La lista a cui aggiungere un elemento
  * @param elemento  L'elemento da aggiungere
  * 
- * @returns 1 in caso di successo, 0 in caso di fallimento
+ * @returns 0 in caso di successo, -1 in caso di fallimento
 **/
 int addToList(List *list, int elemento);
 
@@ -51,7 +51,7 @@ int addToList(List *list, int elemento);
  * 
  * @param list  La lista da cui rimuovere l'elemento
  * 
- * @returns 1 in caso di successo, 0 in caso di fallimento
+ * @returns L'elemento rimosso dalla lista
 **/
 int removeFromList(List *list);
 

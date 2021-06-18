@@ -6,6 +6,24 @@
 
 #include "hashtable.h"
 
+
+int findKey(hashtable_t* hasht, char* key) {
+	int i = hasht->capacity;
+	while(--i >= 0)
+	{
+		hash_elem_t* e = hasht->table[i];
+		while(e)
+		{
+			if(strcmp(key, e->key) == 0) {
+				return 1;
+			}
+			e = e->next;
+		}
+	}
+	return 0;
+}
+
+
 /* 	Internal funcion to calculate hash for keys.
 	It's based on the DJB algorithm from Daniel J. Bernstein.
 	The key must be ended by '\0' character.*/

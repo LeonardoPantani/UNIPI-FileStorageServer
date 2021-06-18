@@ -72,13 +72,11 @@ int readMessage(int fd, Message* msg) {
         printf("Read message>> BYTE LETTI (iniziali) (azione %d): %d\n", msg->action, ret); fflush(stdout);
     #endif
 
-    if(ret == 0) return 1; // connessione chiusa dall'altro partecipante (nessun byte letto)
+    if(ret == 0) return -1; // connessione chiusa dall'altro partecipante (nessun byte letto)
 
     // leggo data dinamicamente (se è 0 la lunghezza non leggo nulla)
     if(msg->data_length > 0 && msg->data != NULL) {
-        msg->data = malloc(msg->data_length+1);
-        memset(msg->data, 0, msg->data_length+1);
-        checkM1(msg->data == NULL, "malloc data");
+        msg->data = cmalloc(msg->data_length+1);
 
         int remainingBytes = msg->data_length;
         char* writePointer = msg->data;

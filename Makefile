@@ -107,7 +107,6 @@ test1:
 	@echo "*************** AVVIO TEST 1 ****************"
 	@echo "*********************************************"
 	@rm -f valgrind_output.txt
-	@valgrind --leak-check=full ./server -conf TestDirectory/serverconfigs/config_1.txt > TestDirectory/output/Server/valgrind_output.txt 2>&1 &
 	@bash scripts/test1.sh
 	@echo "*********************************************"
 	@echo "************** TEST 1 SUPERATO **************"

@@ -118,10 +118,12 @@ static int sendFilesList(char* folderPath, int numFiles, int completed, int tota
 
 
 static int executeAction(ActionType ac, char* parameters) {
+    char* savePointer;
+    char* filePath;
+    char* folderPath;
+
     switch(ac) {
         case AC_WRITE_RECU: { // -w
-            char* savePointer;
-            char* folderPath, *temp;
             DIR* folder;
 
             int numFiles = -1;
@@ -135,7 +137,7 @@ static int executeAction(ActionType ac, char* parameters) {
                 ppf(CLR_HIGHLIGHT); printf("CLIENT> Cartella per la write impostata su '%s'", folderPath); fflush(stdout);
                 free(folder);
             }
-            temp = strtok_r(NULL, ",", &savePointer);
+            char* temp = strtok_r(NULL, ",", &savePointer);
 
             if(temp != NULL) {
                 strtok_r(temp, "=", &savePointer);
@@ -161,9 +163,6 @@ static int executeAction(ActionType ac, char* parameters) {
         }
 
         case AC_WRITE_LIST: { // -W
-            char* savePointer;
-            char* filePath;
-
             int completed = 0;
             int total = 0;
 
@@ -194,9 +193,6 @@ static int executeAction(ActionType ac, char* parameters) {
         }
 
         case AC_READ_LIST: { // -r
-            char* savePointer;
-            char* filePath;
-
             void* filePointer;
             size_t fileSize;
 
@@ -238,6 +234,8 @@ static int executeAction(ActionType ac, char* parameters) {
                 
                 filePath = strtok_r(NULL, ",", &savePointer);
             }
+
+            break;
         }
 
         case AC_READ_RECU: { // -R
@@ -253,9 +251,6 @@ static int executeAction(ActionType ac, char* parameters) {
         }
 
         case AC_DELETE: { // -c
-            char* savePointer;
-            char* filePath;
-
             int completed = 0;
             int total = 0;
 
@@ -277,9 +272,6 @@ static int executeAction(ActionType ac, char* parameters) {
         }
 
         case AC_ACQUIRE_MUTEX: { // -l
-            char* savePointer;
-            char* filePath;
-
             filePath = strtok_r(parameters, ",", &savePointer);
             while(filePath != NULL) {
                 if(lockFile(filePath) != 0) {
@@ -293,9 +285,6 @@ static int executeAction(ActionType ac, char* parameters) {
         }
 
         case AC_RELEASE_MUTEX: { // -u
-            char* savePointer;
-            char* filePath;
-
             filePath = strtok_r(parameters, ",", &savePointer);
             while(filePath != NULL) {
                 if(unlockFile(filePath) != 0) {
@@ -321,8 +310,8 @@ int main(int argc, char* argv[]) {
 	if(argc > 1) {
 		int opt;
         
-        ActionType actionList[50];
-        char parameterList[50][PATH_MAX];
+        ActionType actionList[100];
+        char parameterList[100][PATH_MAX];
 
         int actions = 0;
 
@@ -488,7 +477,6 @@ int main(int argc, char* argv[]) {
         // === INIZIO COMUNICAZIONE CON SERVER ===
         // creo variabile per contenere richieste
         Message* msg = cmalloc(sizeof(Message));
-        checkStop(msg == NULL, "malloc msg");
         // fine variabile per contenere richieste
         setMessage(msg, ANS_UNKNOWN, 0, NULL, NULL, 0);
 
@@ -498,7 +486,7 @@ int main(int argc, char* argv[]) {
         if(esito == 0) {
             if(ac == ANS_WELCOME) {
                 ppf(CLR_SUCCESS); printSave("CLIENT> Ricevuto WELCOME dal server: %s", msg->data); ppff();
-                free(msg->data);
+                //free(msg->data);
 
                 char* testo_msg = "Grazie, ci sono";
                 setMessage(msg, ANS_HELLO, 0, NULL, testo_msg, strlen(testo_msg));
@@ -510,11 +498,16 @@ int main(int argc, char* argv[]) {
                 ppf(CLR_SUCCESS); printSave("CLIENT> Inviato HELLO al server con successo!"); ppff();
             } else if(ac == ANS_MAX_CONN_REACHED) {
                 ppf(CLR_ERROR); printf("CLIENT> Il server ha raggiunto il limite massimo di connessioni.\n"); ppff();
+            } else {
+                ppf(CLR_ERROR); printSave("CLIENT> Il server ha mandato una risposta non valida. ACTION: %d", ac); ppff();
             }
         }
-
-        
         free(msg);
+
+        // imposto tempo tra una richiesta e l'altra
+        struct timespec t;
+        t.tv_sec  = (int)timeoutRequests/1000;
+        t.tv_nsec = (timeoutRequests%1000)*1000000000;
 
         // se l'ultima richiesta è stata una WELCOME allora inizio ad eseguire le richieste
         if(ac == ANS_WELCOME) {
@@ -522,11 +515,8 @@ int main(int argc, char* argv[]) {
             for(int i = 0; i < actions; i++) {
                 if(executeAction(actionList[i], parameterList[i]) == 0) {
                     ppf(CLR_SUCCESS); printf("CLIENT> Operazione %s completata con successo\n", getOperationName(actionList[i])); ppff();
-                    
-					struct timespec t;
-					t.tv_sec  = (int)timeoutRequests/1000;
-					t.tv_nsec = (timeoutRequests%1000)*1000000000;
-					nanosleep(&t, NULL);
+					
+                    if(i+1 < actions) nanosleep(&t, NULL); // aspetto solo se ho ancora operazioni da eseguire
                 } else {
                     ppf(CLR_ERROR); printf("CLIENT> Operazione %s fallita, motivo: %s (codice errore %d)\n", getOperationName(actionList[i]), strerror(errno), errno); ppff();
                 }
@@ -536,9 +526,9 @@ int main(int argc, char* argv[]) {
 
         // finite le azioni richieste, chiudo la connessione
 		if(closeConnection(socketPath) == 0) {
-            ppf(CLR_INFO); printf("CLIENT> Connessione terminata con successo.\n"); ppff();
+            ppf(CLR_INFO); printf("CLIENT> Connessione terminata con successo\n"); ppff();
         } else {
-            ppf(CLR_ERROR); printf("CLIENT> Connessione non terminata.\n"); ppff();
+            ppf(CLR_ERROR); printf("CLIENT> Connessione non terminata\n"); ppff();
         }
 
         fclose(fileLog);
@@ -546,7 +536,7 @@ int main(int argc, char* argv[]) {
 
 		return 0;
 	} else {
-		ppf(CLR_ERROR); printf("CLIENT> Fornisci almeno un argomento. Usa -h se non sei sicuro.\n"); ppff();
+		ppf(CLR_ERROR); printf("CLIENT> Fornisci almeno un argomento; usa -h se non sei sicuro\n"); ppff();
 		return 0;
 	}
     return 0;

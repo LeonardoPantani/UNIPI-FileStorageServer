@@ -29,17 +29,27 @@ Statistics stats = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 pthread_mutex_t mutexStatistiche = PTHREAD_MUTEX_INITIALIZER;
 
 hashtable_t *ht = NULL;
-pthread_mutex_t* mutexHT = NULL;
-int nmutex = 0;
+pthread_mutex_t mutexHT = PTHREAD_MUTEX_INITIALIZER;
 
 List *coda_client = NULL;
 pthread_mutex_t mutexCodaClient = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t clientInAttesa = PTHREAD_COND_INITIALIZER;
 
-int chiusuraForte  = FALSE;
-int chiusuraDebole = FALSE;
+volatile sig_atomic_t chiusuraForte  = FALSE;
+volatile sig_atomic_t chiusuraDebole = FALSE;
 pthread_mutex_t mutexChiusura = PTHREAD_MUTEX_INITIALIZER;
 
+
+void cleanHT(hashtable_t* hasht) {
+    hash_elem_it it = HT_ITERATOR(ht);
+    char* k = ht_iterate_keys(&it);
+    while(k != NULL) {
+        File* el = (File *)ht_get(hasht, k);
+        if(el->data_length > 0) free(el->data);
+        k = ht_iterate_keys(&it);
+    }
+    ht_destroy(hasht);
+}
 
 char* findOldFile(hashtable_t hasht) {
 	hash_elem_it it2 = HT_ITERATOR(ht);
@@ -62,11 +72,7 @@ static int checkLimits(Message* msg, int which) {
 
 int expellFiles(Message* msg, int socketConnection, int numGestoreConnessione, int controllo) {
     int i = 0;
-
-    // creo variabile per contenere richieste
     Message* risposta = cmalloc(sizeof(Message));
-    checkStop(risposta == NULL, "malloc risposta");
-    // fine variabile per contenere richieste
 
     setMessage(risposta, ANS_UNKNOWN, 0, NULL, NULL, 0);
 
@@ -92,7 +98,8 @@ int expellFiles(Message* msg, int socketConnection, int numGestoreConnessione, i
             
             setMessage(risposta, ANS_STREAM_FILE, 0, oldFile->path, oldFile->data, oldFile->data_length);
             checkStop(sendMessage(socketConnection, risposta) == -1, "errore invio messaggio con file flushato");
-
+            
+            if(oldFile->data_length > 0) free(oldFile->data);
             free(ht_remove(ht, oldFile->path));
             i++;
         } while((esitoControllo = checkLimits(msg, controllo)) != 0);
@@ -122,10 +129,7 @@ void printFiles() {
 
 
 static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
-    // creo variabile per contenere richieste
     Message* risposta = cmalloc(sizeof(Message));
-    checkStop(risposta == NULL, "malloc risposta");
-    // fine variabile per contenere richieste
 
     setMessage(risposta, ANS_UNKNOWN, 0, NULL, NULL, 0);
 
@@ -249,7 +253,9 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
             /* =========== FINE CONTROLLO SFORAMENTO MEMORIA ============= */
             
             // modifiche a file
-            el->data = msg->data;
+            void* dato = cmalloc(msg->data_length);
+            memcpy(dato, msg->data, msg->data_length);
+            el->data = dato;
             el->data_length = msg->data_length;
             el->updatedDate = (unsigned long)time(NULL);
             el->lastAction = REQ_WRITE;
@@ -264,6 +270,7 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
 
             setMessage(risposta, ANS_OK, 0, NULL, NULL, 0);
             ppf(CLR_SUCCESS); printSave("GC %d > File '%s' scritto nella hashtable", numero, msg->path); ppff();
+            free(msg->data);
             break;
         }
 
@@ -355,13 +362,15 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
                 break;
             }
 
+            int bytesEliminati = el->data_length;
             // modifiche a file
+            free(el->data);
             free(ht_remove(ht, msg->path));
 
             // aggiornamento statistiche
             locka(mutexStatistiche);
             stats.current_files_saved--;
-            stats.current_bytes_used = stats.current_bytes_used - el->data_length;
+            stats.current_bytes_used = stats.current_bytes_used - bytesEliminati;
             stats.n_replace_applied++;
             stats.n_delete++;
             unlocka(mutexStatistiche);
@@ -407,6 +416,7 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
 
             setMessage(risposta, ANS_OK, 0, NULL, NULL, 0);
             ppf(CLR_SUCCESS); printSave("GC %d > File '%s' aggiornato nella hashtable.", numero, msg->path); ppff();
+            free(msg->data);
             break;
         }
 
@@ -467,15 +477,11 @@ void* gestoreConnessione(void* n) {
         
 
         // === INIZIO A SERVIRE IL CLIENT ===
-        // creo variabile per contenere richieste
         Message* msg = cmalloc(sizeof(Message));
-        checkStop(msg == NULL, "malloc risposta");
-        // fine variabile per contenere richieste
         setMessage(msg, ANS_UNKNOWN, 0, NULL, NULL, 0);
 
         // invio messaggio di benvenuto al client
         Message* benvenuto = cmalloc(sizeof(Message));
-        checkStop(benvenuto == NULL, "malloc benvenuto");
 
         char* testo_msg = "Benvenuto, sono in attesa di tue richieste";
         setMessage(benvenuto, ANS_WELCOME, 0, NULL, testo_msg, strlen(testo_msg));
@@ -489,7 +495,7 @@ void* gestoreConnessione(void* n) {
         checkStop(esito != 0 || msg->action != ANS_HELLO, "risposta WELCOME iniziale")
         ppf(CLR_SUCCESS); printSave("GC %d > Il client ha risposto al WELCOME: %s. Inizio comunicazione.", numero, msg->data); ppff();
 
-        free(msg->data); // libero solo data perché non ricevo nessun path
+        free(msg->data); // libero solo data
         
         // qui inizia la comunicazione dopo la conferma dei messaggi WELCOME ED HELLO
         while((esito = readMessage(socketConnection, msg)) == 0) {
@@ -512,8 +518,6 @@ void* gestoreConnessione(void* n) {
             Message* risposta = elaboraAzione(socketConnection, msg, numero);
 
             checkStop(sendMessage(socketConnection, risposta) == -1, "errore invio messaggio");
-
-            //free(msg->path); // FIXME
 
             free(risposta);
         }
@@ -555,7 +559,6 @@ void *gestorePool(void* socket) {
             ppf(CLR_ERROR); printSave("GP   > Raggiuto il limite di connessioni contemporanee. Invio messaggio di errore.\n"); ppff();
         
             Message* msg = cmalloc(sizeof(Message));
-            checkStop(msg == NULL, "malloc errore max connessioni");
 
             setMessage(msg, ANS_MAX_CONN_REACHED, 0, NULL, NULL, 0);
 
@@ -692,11 +695,6 @@ int main(int argc, char* argv[]) {
     ht = ht_create(config.max_files);
     checkStop(ht == NULL, "creazione tabella hash");
 
-    nmutex = config.max_files;
-    mutexHT = cmalloc(nmutex*sizeof(pthread_mutex_t));
-    checkStop(mutexHT == NULL, "creazione mutexHT iniziale");
-    for(i = 0; i < nmutex; i++) pthread_mutex_init(&mutexHT[i], NULL);
-
     
     /*========= CONNESSIONE =========*/
     unlink(config.socket_file_name); // FIXME da rimuovere quando sta roba sarà più stabile
@@ -724,9 +722,8 @@ int main(int argc, char* argv[]) {
 
     // creo l'insieme di workers
     pthread_t* idPool = cmalloc(config.max_workers * sizeof(pthread_t));
-    checkStop(idPool == NULL, "malloc id pool di thread");
 
-    stats.workerRequests = (int*)malloc(config.max_workers*sizeof(int));
+    stats.workerRequests = (int*)cmalloc(config.max_workers*sizeof(int));
     int *copyWR = stats.workerRequests;
     for(i = 0; i < config.max_workers; i++) {
         stats.workerRequests[i] = 0;
@@ -735,7 +732,6 @@ int main(int argc, char* argv[]) {
     // faccio create per ogni worker specificato nel config
     for(i = 0; i < config.max_workers; i++) {
         int *argomento = cmalloc(sizeof(*argomento));
-        checkStop(argomento == NULL, "allocazione memoria argomento thread");
 
         *argomento = i;
 
@@ -781,8 +777,7 @@ int main(int argc, char* argv[]) {
     ppf(CLR_INFO); printSave("----- FINE SERVER [Data: %s] -----", buffer); ppff();
 
     free(copyWR);
-    free(mutexHT);
-    ht_destroy(ht);
+    cleanHT(ht);
     fclose(fileLog);
     return 0;
 }

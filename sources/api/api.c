@@ -101,12 +101,7 @@ int openFile(const char* pathname, int flags) {
         errno = EINVAL;
         return -1;
     }
-    
-    // creo variabile per contenere richieste
     Message* msg = cmalloc(sizeof(Message));
-    checkStop(msg == NULL, "malloc risposta");
-    // fine variabile per contenere richieste
-
     int socketConnection;
     extern char ejectedFileFolder[PATH_MAX];
 
@@ -217,13 +212,8 @@ int openFile(const char* pathname, int flags) {
 
 
 int readFile(const char* pathname, void** buf, size_t* size) {
-    // creo variabile per contenere richieste
     Message* msg = cmalloc(sizeof(Message));
-    checkStop(msg == NULL, "malloc risposta");
-    // fine variabile per contenere richieste
-
     setMessage(msg, REQ_READ, 0, (char*)pathname, NULL, 0); // inizializzo
-
     int socketConnection;
 
     if((socketConnection = searchAssocByName(socketPath)) != -1) {
@@ -272,15 +262,9 @@ int readFile(const char* pathname, void** buf, size_t* size) {
 
 
 int readNFiles(int N, const char* dirname) {
-    // creo variabile per contenere richieste
     Message* msg = cmalloc(sizeof(Message));
-    checkStop(msg == NULL, "malloc risposta");
-    // fine variabile per contenere richieste
-
     if(N <= 0) N = -1; // se N <= 0 allora vanno letti tutti i file, lo imposto a -1 così il server capisce cosa intendo
-
     setMessage(msg, REQ_READ_N, 0, NULL, &N, sizeof(int)); // inizializzo
-
     int socketConnection;
     extern char savedFileFolder[PATH_MAX];
 
@@ -367,11 +351,7 @@ int readNFiles(int N, const char* dirname) {
 
 
 int writeFile(const char* pathname, const char* dirname) {
-    // creo variabile per contenere richieste
     Message* msg = cmalloc(sizeof(Message));
-    checkStop(msg == NULL, "malloc risposta");
-    // fine variabile per contenere richieste
-
     setMessage(msg, ANS_UNKNOWN, 0, NULL, NULL, 0); // inizializzo
 
     int socketConnection;
@@ -498,13 +478,8 @@ int writeFile(const char* pathname, const char* dirname) {
 
 
 int appendToFile(const char* pathname, void* buf, size_t size, const char* dirname) {
-    // creo variabile per contenere richieste
     Message* msg = cmalloc(sizeof(Message));
-    checkStop(msg == NULL, "malloc risposta");
-    // fine variabile per contenere richieste
-
     setMessage(msg, REQ_APPEND, 0, (char*)pathname, buf, size);
-
     int socketConnection;
 
     if((socketConnection = searchAssocByName(socketPath)) != -1) {
@@ -599,13 +574,8 @@ int appendToFile(const char* pathname, void* buf, size_t size, const char* dirna
 
 
 int lockFile(const char* pathname) {
-    // creo variabile per contenere richieste
     Message* msg = cmalloc(sizeof(Message));
-    checkStop(msg == NULL, "malloc risposta");
-    // fine variabile per contenere richieste
-
     setMessage(msg, REQ_LOCK, 0, (char*)pathname, NULL, 0);
-
     int socketConnection;
 
     if((socketConnection = searchAssocByName(socketPath)) != -1) {
@@ -652,13 +622,8 @@ int lockFile(const char* pathname) {
 
 
 int unlockFile(const char* pathname) {
-    // creo variabile per contenere richieste
     Message* msg = cmalloc(sizeof(Message));
-    checkStop(msg == NULL, "malloc risposta");
-    // fine variabile per contenere richieste
-
     setMessage(msg, REQ_UNLOCK, 0, (char*)pathname, NULL, 0);
-
     int socketConnection;
 
     if((socketConnection = searchAssocByName(socketPath)) != -1) {
@@ -711,13 +676,8 @@ int unlockFile(const char* pathname) {
 
 
 int closeFile(const char* pathname) {
-    // creo variabile per contenere richieste
     Message* msg = cmalloc(sizeof(Message));
-    checkStop(msg == NULL, "malloc risposta");
-    // fine variabile per contenere richieste
-
     setMessage(msg, REQ_CLOSE, 0, (char*)pathname, NULL, 0); // inizializzo
-
     int socketConnection;
 
     if((socketConnection = searchAssocByName(socketPath)) != -1) {
@@ -773,13 +733,8 @@ int closeFile(const char* pathname) {
 
 
 int removeFile(const char* pathname) {
-    // creo variabile per contenere richieste
     Message* msg = cmalloc(sizeof(Message));
-    checkStop(msg == NULL, "malloc risposta");
-    // fine variabile per contenere richieste
-
     setMessage(msg, REQ_DELETE, 0, (char*)pathname, NULL, 0); // inizializzo
-
     int socketConnection;
 
     if((socketConnection = searchAssocByName(socketPath)) != -1) {

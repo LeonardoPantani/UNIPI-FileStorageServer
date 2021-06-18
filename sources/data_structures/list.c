@@ -9,10 +9,7 @@
 List* createList(int maxSlots) {
     checkNull(maxSlots <= 0, "numero di slot massimi minore o uguale a 0");
     List* lista = cmalloc(sizeof(List));
-    checkNull(lista == NULL, "malloc lista");
-
     lista->array = cmalloc(maxSlots*sizeof(int));
-    checkNull(lista->array == NULL, "malloc queue della lista");
 
     lista->maxSlots = maxSlots;
     lista->usedSlots = 0;
@@ -35,7 +32,7 @@ int addToList(List *list, int elemento) {
     checkM1(list->usedSlots >= list->maxSlots, "add ad una list che ha raggiunto/superato il limite di slot massimi");
     list->usedSlots++;
     list->array[list->last] = elemento;
-    list->last = list->last+1;
+    list->last = (list->last+1) % list->maxSlots;
 
     return 0;
 }
@@ -49,7 +46,7 @@ int removeFromList(List *list) {
 
     preso = list->array[list->first];
     list->usedSlots--;
-    list->first = list->first+1;
+    list->first = (list->first+1) % list->maxSlots;
 
     return preso;
 }
