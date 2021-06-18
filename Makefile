@@ -118,7 +118,6 @@ test2:
 	@echo "*********************************************"
 	@echo "*************** AVVIO TEST 2 ****************"
 	@echo "*********************************************"
-	@./server -conf TestDirectory/serverconfigs/config_2.txt &
 	@bash scripts/test2.sh
 	@echo "*********************************************"
 	@echo "************** TEST 2 SUPERATO **************"
@@ -130,7 +129,6 @@ test3:
 	@echo "*********************************************"
 	@echo "*************** AVVIO TEST 3 ****************"
 	@echo "*********************************************"
-	@./server -conf TestDirectory/serverconfigs/config_3.txt &
 	@bash scripts/test3.sh
 	@echo "*********************************************"
 	@echo "************** TEST 3 SUPERATO **************"

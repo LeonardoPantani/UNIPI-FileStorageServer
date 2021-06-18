@@ -30,7 +30,7 @@ fi
 exec 4< $FILESTATS
 
 # salvo le variabili
-read -r -u 4 data avg_read avg_written n_read n_write n_lock n_openlock n_unlock n_delete n_close max_size_reached max_file_number_reached n_replace_applied max_concurrent_connections
+read -r -u 4 data avg_read avg_written n_read n_write n_lock n_openlock n_unlock n_delete n_close max_size_reached max_file_number_reached n_replace_applied max_concurrent_connections blocked_connections
 
 data=$(TZ=":Europe/Rome" date -d @${data});
 # stampo a schermo i risultati
@@ -44,6 +44,9 @@ echo -e "$avg_read bytes\t$avg_written bytes\t$n_read\t$n_write\t$n_lock\t$n_ope
 echo ''
 echo -e "DIM. MAX OCCUPATA\t#FILE MAX\t#APPLICAZIONI ALGORITMO DI ESPULSIONE\t#CONNESSIONI CONCORRENTI"
 echo -e "$(bc <<< "scale=6;$max_size_reached/1000000") MB\t\t$max_file_number_reached\t\t$n_replace_applied\t\t\t\t\t$max_concurrent_connections"
+echo ''
+echo -e "#CONNESSIONI BLOCCATE"
+echo -e "$blocked_connections"
 echo ''
 echo -e "ID WORKER\t#RICHIESTE ESEGUITE"
 

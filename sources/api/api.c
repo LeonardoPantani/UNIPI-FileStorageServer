@@ -42,7 +42,36 @@ int searchAssocByName(char* socketname) {
     return -1;
 }
 
+int saveToFolder(Message* msg, const char* destinationFolder, char* logPrefix, char* customText) {
+    if(strcmp(destinationFolder, "#") == 0) {
+        ppf(CLR_WARNING); printSave("%s CLIENT> Il file remoto '%s' (%d bytes) non verrà salvato perché non è stata specificata nessuna cartella %s.", logPrefix, msg->path, msg->data_length, customText); ppff();
+    } else {
+        FILE* filePointer;
+        char percorso[PATH_MAX];
+        memset(percorso, 0, PATH_MAX);
 
+        strcpy(percorso, destinationFolder);
+        
+        if(percorso[PATH_MAX - 1] != '/') {
+            strcat(percorso, "/");
+        }
+        strcat(percorso, basename(msg->path));
+
+        filePointer = fopen(percorso, "wb");
+        if(filePointer == NULL) { 
+            ppf(CLR_ERROR); printSave("%s CLIENT> Impossibile salvare file remoto nel percorso specificato: '%s'.", logPrefix, percorso);
+            return -1;
+        }
+
+        fwrite(msg->data, 1, msg->data_length, filePointer);
+        ppf(CLR_INFO); printSave("%s CLIENT> File remoto '%s' (%d bytes) salvato in '%s'", logPrefix, msg->path, msg->data_length, percorso); ppff();
+        
+        fclose(filePointer);
+        free(msg->data);
+    }
+
+    return 0;
+}
 
 int openConnection(const char* sockname, int msec, const struct timespec abstime) {
     // creazione socket
@@ -122,32 +151,7 @@ int openFile(const char* pathname, int flags) {
                     case ANS_STREAM_START: {
                         while(readMessage(socketConnection, msg) == 0 && msg->action == ANS_STREAM_FILE) {
                             ppf(CLR_HIGHLIGHT); printSave("OF CLIENT> Espulso file remoto '%s' (%d bytes) per fare spazio a %s", msg->path, msg->data_length, pathname); ppff();
-                            if(strcmp(ejectedFileFolder, "#") == 0) {
-                                ppf(CLR_WARNING); printSave("OF CLIENT> Il file remoto '%s' (%d bytes) non verrà salvato perché non è stata specificata nessuna cartella con -D.", msg->path, msg->data_length); ppff();
-                            } else {
-                                FILE* filePointer;
-                                char percorso[PATH_MAX];
-                                memset(percorso, 0, PATH_MAX);
-
-                                strcpy(percorso, ejectedFileFolder);
-                                
-                                if(percorso[PATH_MAX - 1] != '/') {
-                                    strcat(percorso, "/");
-                                }
-                                strcat(percorso, basename(msg->path));
-
-                                filePointer = fopen(percorso, "wb");
-                                if(filePointer == NULL) { 
-                                    ppf(CLR_ERROR); printSave("OF CLIENT> Impossibile salvare file remoto nel percorso specificato: '%s'.", percorso);
-                                    continue;
-                                }
-
-                                fwrite(msg->data, 1, msg->data_length, filePointer);
-                                ppf(CLR_INFO); printSave("OF CLIENT> File remoto '%s' (%d bytes) salvato in '%s'", msg->path, msg->data_length, percorso); ppff();
-                                
-                                fclose(filePointer);
-                                free(msg->data);
-                            }
+                            saveToFolder(msg, ejectedFileFolder, "OF", "con -D");
                         }
                         
                         if(readMessage(socketConnection, msg) == 0) {
@@ -276,33 +280,7 @@ int readNFiles(int N, const char* dirname) {
                         int i = 0;
                         while(readMessage(socketConnection, msg) == 0 && msg->action == ANS_STREAM_FILE) {
                             ppf(CLR_HIGHLIGHT); printSave("RN CLIENT> File remoto '%s' ricevuto dal server.", msg->path); ppff();
-                            if(strcmp(savedFileFolder, "#") == 0) {
-                                ppf(CLR_WARNING); printSave("RN CLIENT> Il file remoto '%s' (%d bytes) non verrà salvato perché non è stata specificata nessuna cartella con -d.", msg->path, msg->data_length); ppff();
-                            } else {
-                                FILE* filePointer;
-                                char percorso[PATH_MAX];
-                                memset(percorso, 0, PATH_MAX);
-
-                                strcpy(percorso, savedFileFolder);
-                                
-                                if(percorso[PATH_MAX - 1] != '/') {
-                                    strcat(percorso, "/");
-                                }
-                                strcat(percorso, basename(msg->path));
-
-                                filePointer = fopen(percorso, "wb");
-                                if(filePointer == NULL) { 
-                                    ppf(CLR_ERROR); printSave("RN CLIENT> Impossibile salvare file remoto nel percorso specificato: '%s'.", percorso);
-                                    continue;
-                                }
-
-                                fwrite(msg->data, 1, msg->data_length, filePointer);
-                                ppf(CLR_INFO); printSave("RN CLIENT> File remoto '%s' (%d bytes) salvato in '%s'", msg->path, msg->data_length, percorso); ppff();
-                                
-                                fclose(filePointer);
-                                free(msg->data);
-                            }
-                            i++;
+                            if(saveToFolder(msg, savedFileFolder, "RN", "con -d") == 0) i++;
                         }
 
                         if(readMessage(socketConnection, msg) == 0) {
@@ -392,32 +370,7 @@ int writeFile(const char* pathname, const char* dirname) {
                     case ANS_STREAM_START: {
                         while(readMessage(socketConnection, msg) == 0 && msg->action == ANS_STREAM_FILE) {
                             ppf(CLR_HIGHLIGHT); printSave("WF CLIENT> Espulso file remoto '%s' (%d bytes) per fare spazio a %s (%ld bytes)", msg->path, msg->data_length, pathname, sb.st_size); ppff();
-                            if(dirname == NULL) {
-                                ppf(CLR_WARNING); printSave("WF CLIENT> Il file remoto '%s' (%d bytes) non verrà salvato perché non è stata specificata nessuna cartella (dirname = NULL).", msg->path, msg->data_length); ppff();
-                            } else {
-                                FILE* filePointer;
-                                char percorso[PATH_MAX];
-                                memset(percorso, 0, PATH_MAX);
-
-                                strcpy(percorso, dirname);
-                                
-                                if(percorso[PATH_MAX - 1] != '/') {
-                                    strcat(percorso, "/");
-                                }
-                                strcat(percorso, basename(msg->path));
-
-                                filePointer = fopen(percorso, "wb");
-                                if(filePointer == NULL) { 
-                                    ppf(CLR_ERROR); printSave("WF CLIENT> Impossibile salvare file remoto nel percorso specificato: '%s'.", percorso);
-                                    continue;
-                                }
-
-                                fwrite(msg->data, 1, msg->data_length, filePointer);
-                                ppf(CLR_INFO); printSave("WF CLIENT> File remoto '%s' (%d bytes) salvato in '%s'", msg->path, msg->data_length, percorso); ppff();
-                                
-                                fclose(filePointer);
-                                free(msg->data);
-                            }
+                            saveToFolder(msg, dirname, "WF", "(dirname = NULL)");
                         }
                         
                         if(readMessage(socketConnection, msg) == 0) {
@@ -494,32 +447,7 @@ int appendToFile(const char* pathname, void* buf, size_t size, const char* dirna
                     case ANS_STREAM_START: {
                         while(readMessage(socketConnection, msg) == 0 && msg->action != ANS_STREAM_END) {
                             ppf(CLR_HIGHLIGHT); printSave("AF CLIENT> Espulso file remoto '%s' (%d bytes) per fare spazio al buffer da appendere (%zu bytes)", msg->path, msg->data_length, size); ppff();
-                            if(dirname == NULL) {
-                                ppf(CLR_WARNING); printSave("AF CLIENT> Il file remoto '%s' (%d bytes) non verrà salvato perché non è stata specificata nessuna cartella (dirname = NULL).", msg->path, msg->data_length); ppff();
-                            } else {
-                                FILE* filePointer;
-                                char percorso[PATH_MAX];
-                                memset(percorso, 0, strlen(percorso));
-
-                                strcpy(percorso, dirname);
-                                
-                                if(percorso[strlen(percorso) - 1] != '/') {
-                                    strcat(percorso, "/");
-                                }
-                                strcat(percorso, basename(msg->path));
-
-                                filePointer = fopen(percorso, "wb");
-                                if(filePointer == NULL) { 
-                                    ppf(CLR_ERROR); printSave("AF CLIENT> Impossibile salvare file remoto nel percorso specificato: '%s'.", percorso);
-                                    continue;
-                                }
-
-                                fwrite(msg->data, 1, msg->data_length, filePointer);
-                                ppf(CLR_INFO); printSave("AF CLIENT> File remoto '%s' (%d bytes) salvato in '%s'", msg->path, msg->data_length, percorso); ppff();
-                                
-                                fclose(filePointer);
-                                free(msg->data);
-                            }
+                            saveToFolder(msg, dirname, "AF", "(dirname = NULL)");
                         }
                         
                         if(readMessage(socketConnection, msg) == 0) {

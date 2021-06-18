@@ -25,7 +25,7 @@
 FILE* fileLog;
 pthread_mutex_t mutexFileLog = PTHREAD_MUTEX_INITIALIZER;
 
-Statistics stats = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+Statistics stats = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 pthread_mutex_t mutexStatistiche = PTHREAD_MUTEX_INITIALIZER;
 
 hashtable_t *ht = NULL;
@@ -45,7 +45,7 @@ void cleanHT(hashtable_t* hasht) {
     char* k = ht_iterate_keys(&it);
     while(k != NULL) {
         File* el = (File *)ht_get(hasht, k);
-        if(el->data_length > 0) free(el->data);
+        free(el->data);
         k = ht_iterate_keys(&it);
     }
     ht_destroy(hasht);
@@ -133,6 +133,7 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
 
     setMessage(risposta, ANS_UNKNOWN, 0, NULL, NULL, 0);
 
+    locka(mutexHT);
     File* el = (File *)ht_get(ht, msg->path);
 
     switch(msg->action) {
@@ -140,12 +141,14 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
             switch(msg->flags) {
                 case 0: { // file aperto e basta
                     if(el == NULL) {
+                        unlocka(mutexHT);
                         setMessage(risposta, ANS_FILE_NOT_EXISTS, 0, NULL, NULL, 0);
                         ppf(CLR_ERROR); printSave("GC %d > Impossibile aprire file '%s' nella hash table: file inesistente", numero, msg->path); ppff();
                         break;
                     }
 
                     if(el->openBy != -1 && el->openBy != socketConnection) {
+                        unlocka(mutexHT);
                         setMessage(risposta, ANS_NO_PERMISSION, 0, NULL, NULL, 0);
                         ppf(CLR_ERROR); printSave("GC %d > Impossibile aprire file '%s' nella hash table: è aperto da qualcun altro", numero, msg->path); ppff();
                         break;
@@ -155,6 +158,7 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
                     el->openBy = socketConnection;
                     el->updatedDate = (unsigned long)time(NULL);
                     el->lastAction = REQ_OPEN;
+                    unlocka(mutexHT);
 
                     // aggiorno le statistiche all'immissione di un file
                     locka(mutexStatistiche);
@@ -169,6 +173,7 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
 
                 case 1: { // file creato e aperto
                     if(el != NULL) {
+                        unlocka(mutexHT);
                         setMessage(risposta, ANS_FILE_EXISTS, 0, NULL, NULL, 0);
                         ppf(CLR_ERROR); printSave("GC %d > Impossibile creare file '%s' nella hash table: esiste già", numero, msg->path); ppff();
                         break;
@@ -186,6 +191,7 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
                     f->lastAction = REQ_OPEN;
                     strcpy(f->path, msg->path);
                     checkStop(ht_put(ht, msg->path, f) == HT_ERROR, "creazione e apertura file senza lock");
+                    unlocka(mutexHT);
 
                     // aggiornamento statistiche
                     locka(mutexStatistiche);
@@ -200,6 +206,7 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
                 }
 
                 default: {
+                    unlocka(mutexHT);
                     setMessage(risposta, ANS_UNKNOWN, 0, NULL, NULL, 0);
                     ppf(CLR_ERROR); printSave("GC %d > Flag impostata '%d' non valida o non supportata", msg->flags, numero); ppff();
                 }
@@ -209,6 +216,7 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
 
         case REQ_READ: {
             if(el == NULL) { // il file non esiste
+                unlocka(mutexHT);
                 setMessage(risposta, ANS_FILE_NOT_EXISTS, 0, NULL, NULL, 0);
                 ppf(CLR_ERROR); printSave("GC %d > File '%s' non trovato, impossibile leggerlo", numero, msg->path); ppff();
                 break;
@@ -217,6 +225,7 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
             // modifiche a file
             el->updatedDate = (unsigned long)time(NULL);
             el->lastAction = REQ_READ;
+            unlocka(mutexHT);
 
             // aggiornamento statistiche
             locka(mutexStatistiche);
@@ -231,18 +240,21 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
 
         case REQ_WRITE: {
             if(el == NULL) {
+                unlocka(mutexHT);
                 setMessage(risposta, ANS_FILE_NOT_EXISTS, 0, NULL, NULL, 0);
                 ppf(CLR_ERROR); printSave("GC %d > File '%s' non trovato, impossibile scriverci.", numero, msg->path); ppff();
                 break;
             }
 
             if(el->lastAction != REQ_OPEN || el->data_length != 0) {
+                unlocka(mutexHT);
                 setMessage(risposta, ANS_BAD_RQST, 0, NULL, NULL, 0);
                 ppf(CLR_ERROR); printSave("GC %d > File '%s' non appena creato, impossibile scriverci.", numero, msg->path); ppff();
                 break;
             }
 
             if(el->openBy != -1 && el->openBy != socketConnection) {
+                unlocka(mutexHT);
                 setMessage(risposta, ANS_NO_PERMISSION, 0, NULL, NULL, 0);
                 ppf(CLR_ERROR); printSave("GC %d > Impossibile scrivere sul file '%s' nella hash table perché è aperto da qualcun altro", numero, msg->path); ppff();
                 break;
@@ -259,6 +271,7 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
             el->data_length = msg->data_length;
             el->updatedDate = (unsigned long)time(NULL);
             el->lastAction = REQ_WRITE;
+            unlocka(mutexHT);
 
             // aggiornamento statistiche
             locka(mutexStatistiche);
@@ -276,6 +289,7 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
 
         case REQ_READ_N: {
             if(ht->e_num == 0) {
+                unlocka(mutexHT);
                 setMessage(risposta, ANS_FILE_NOT_EXISTS, 0, NULL, NULL, 0);
                 ppf(CLR_ERROR); printSave("GC %d > Non ci sono file da mandare, invio messaggio di errore.", numero); ppff();
                 break;
@@ -306,6 +320,7 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
                 k = ht_iterate_keys(&it);
                 e = (File *)ht_get(ht, k);
             }
+            unlocka(mutexHT);
 
             setMessage(risposta, ANS_STREAM_END, 0, NULL, NULL, 0);
             checkStop(sendMessage(socketConnection, risposta) == -1, "errore invio messaggio fine file");
@@ -323,12 +338,14 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
 
         case REQ_CLOSE: {
             if(el == NULL) {
+                unlocka(mutexHT);
                 setMessage(risposta, ANS_FILE_NOT_EXISTS, 0, NULL, NULL, 0);
                 ppf(CLR_ERROR); printSave("GC %d > File '%s' non trovato, impossibile chiuderlo.", numero, msg->path); ppff();
                 break;
             }
 
             if(el->openBy != -1 && el->openBy != socketConnection) { // il client può chiudere i suoi file e file non aperti (non cambia niente)
+                unlocka(mutexHT);
                 setMessage(risposta, ANS_NO_PERMISSION, 0, NULL, NULL, 0);
                 ppf(CLR_WARNING); printSave("GC %d > Il file '%s' non appartiene al client che ne ha richiesto la chiusura", numero, msg->path); ppff();
                 break;
@@ -338,6 +355,7 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
             el->openBy = -1;
             el->updatedDate = (unsigned long)time(NULL);
             el->lastAction = REQ_CLOSE;
+            unlocka(mutexHT);
 
             // aggiornamento statistiche
             locka(mutexStatistiche);
@@ -351,12 +369,14 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
 
         case REQ_DELETE: {
             if(el == NULL) { // il file da eliminare non esiste
+                unlocka(mutexHT);
                 setMessage(risposta, ANS_FILE_NOT_EXISTS, 0, NULL, NULL, 0);
                 ppf(CLR_ERROR); printSave("GC %d > Il file '%s' non esiste, impossibile eliminarlo", numero, msg->path); ppff();
                 break;
             }
 
             if(el->openBy != -1 && el->openBy != socketConnection) { // il client può eliminare file non aperti da nessuno o i file aperti da lui
+                unlocka(mutexHT);
                 setMessage(risposta, ANS_NO_PERMISSION, 0, NULL, NULL, 0);
                 ppf(CLR_WARNING); printSave("GC %d > Il file '%s' non appartiene al client che ne ha richiesto l'eliminazione", numero, msg->path); ppff();
                 break;
@@ -366,12 +386,12 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
             // modifiche a file
             free(el->data);
             free(ht_remove(ht, msg->path));
+            unlocka(mutexHT);
 
             // aggiornamento statistiche
             locka(mutexStatistiche);
             stats.current_files_saved--;
             stats.current_bytes_used = stats.current_bytes_used - bytesEliminati;
-            stats.n_replace_applied++;
             stats.n_delete++;
             unlocka(mutexStatistiche);
 
@@ -382,12 +402,14 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
 
         case REQ_APPEND: {
             if(el == NULL) {
+                unlocka(mutexHT);
                 setMessage(risposta, ANS_FILE_NOT_EXISTS, 0, NULL, NULL, 0);
                 ppf(CLR_ERROR); printSave("GC %d > File '%s' non trovato, impossibile scriverci.", numero, msg->path); ppff();
                 break;
             }
 
             if(el->openBy != -1 && el->openBy != socketConnection) {
+                unlocka(mutexHT);
                 setMessage(risposta, ANS_NO_PERMISSION, 0, NULL, NULL, 0);
                 ppf(CLR_ERROR); printSave("GC %d > Impossibile scrivere sul file '%s' nella hash table perché è aperto da qualcun altro", numero, msg->path); ppff();
                 break;
@@ -401,10 +423,12 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
             void* dato = cmalloc(el->data_length+msg->data_length);
             memcpy(dato, el->data, el->data_length);
             memcpy((char*)dato+(el->data_length), msg->data, msg->data_length);
+            free(el->data);
             el->data = dato;
             el->data_length = el->data_length+msg->data_length;
             el->updatedDate = (unsigned long)time(NULL);
             el->lastAction = REQ_APPEND;
+            unlocka(mutexHT);
 
             // aggiorno le statistiche all'immissione di un file
             locka(mutexStatistiche);
@@ -421,6 +445,7 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
         }
 
         default: {
+            unlocka(mutexHT);
             char* testo = "Mi dispiace, non so gestire questa richiesta.";
             setMessage(risposta, ANS_BAD_RQST, 0, NULL, testo, strlen(testo));
         }
@@ -567,12 +592,14 @@ void *gestorePool(void* socket) {
 
             checkStop(sendMessage(socketConnection, msg) != 0, "messaggio connessioni max raggiunto");
             free(msg); // libero memoria del messaggio
-            continue;
-        }
 
-        stats.current_connections++;
-        if(stats.current_connections > stats.max_concurrent_connections)
-            stats.max_concurrent_connections = stats.current_connections;
+            stats.blocked_connections++;
+            continue;
+        } else {
+            stats.current_connections++;
+            if(stats.current_connections > stats.max_concurrent_connections)
+                stats.max_concurrent_connections = stats.current_connections;
+        }
         unlocka(mutexStatistiche);
 
         locka(mutexCodaClient);

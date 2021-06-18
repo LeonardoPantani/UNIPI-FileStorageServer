@@ -27,6 +27,7 @@ typedef struct {
     
     int max_concurrent_connections;
 
+    int blocked_connections;
     int current_connections;
     int current_bytes_used;
     int current_files_saved;
