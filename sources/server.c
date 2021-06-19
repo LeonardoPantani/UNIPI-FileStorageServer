@@ -94,7 +94,7 @@ static int checkLimits(Message* msg, int which) {
 
 
 int expellFiles(Message* msg, int socketConnection, int numGestoreConnessione, int controllo) {
-    int i = 0;
+    int esito = 0;
     Message* risposta = cmalloc(sizeof(Message));
 
     setMessage(risposta, ANS_UNKNOWN, 0, NULL, NULL, 0);
@@ -109,6 +109,10 @@ int expellFiles(Message* msg, int socketConnection, int numGestoreConnessione, i
         do {
             char* chiave = findOldFile(ht);
             File* oldFile = ht_get(ht, chiave);
+            if(oldFile == NULL) {
+                esito = -1;
+                break;
+            }
             
             // aggiornamento statistiche
             locka(mutexStatistiche);
@@ -124,7 +128,6 @@ int expellFiles(Message* msg, int socketConnection, int numGestoreConnessione, i
             
             if(oldFile->data_length > 0) free(oldFile->data);
             free(ht_remove(ht, oldFile->path));
-            i++;
         } while((esitoControllo = checkLimits(msg, controllo)) != 0);
 
         setMessage(risposta, ANS_STREAM_END, 0, NULL, NULL, 0);
@@ -133,7 +136,7 @@ int expellFiles(Message* msg, int socketConnection, int numGestoreConnessione, i
 
     free(risposta);
 
-    return i;
+    return esito;
 }
 
 
@@ -146,9 +149,13 @@ void printFiles(hashtable_t* hasht) {
 
     while(k != NULL) {
         File* el = (File *)ht_get(hasht, k);
+        if(el == NULL) {
+            ppf(CLR_ERROR); printSave("LE   > Errore durante la stampa degli elementi nella hash table."); ppff();
+            break;
+        }
         if(el->openBy == -1) opener = "nessuno"; else sprintf(opener, "%d", el->openBy);
         strftime(buffer, MAX_TIMESTAMP_SIZE, "%c", localtime(&el->updatedDate));
-        printSave("PERCORSO: %-45s | AUTORE: %d (aperto da: %s) | DATA AGGIORNAMENTO: %-10s | SPAZIO OCCUPATO: %ld bytes", k, el->author, opener, buffer, el->data_length);
+        printSave("PERCORSO: %-45s | AUTORE: %-3d (aperto da: %s) | DATA AGGIORNAMENTO: %-10s | SPAZIO OCCUPATO: %ld bytes", k, el->author, opener, buffer, el->data_length);
         fflush(stdout);
         k = ht_iterate_keys(&it);
     }
@@ -676,7 +683,9 @@ void *attesaSegnali(void* statFile) {
         }
 
         if(segnale == SIGUSR1) {
+            locka(mutexHT);
             printFiles(ht);
+            unlocka(mutexHT);
         }
 
         if(segnale == SIGUSR2) {
