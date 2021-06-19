@@ -1,6 +1,7 @@
 #!/bin/bash
 # FILE DI TEST N°1
 #
+# Autore: Leonardo Pantani
 #
 
 # avvio il server con valgrind

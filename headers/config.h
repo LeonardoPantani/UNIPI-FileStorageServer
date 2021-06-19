@@ -17,7 +17,7 @@
 
 #define KEY "efhiauefrwhwafghaw2131guys" // chiave perché la configurazione venga letta dal server, è una specie di password
 
-#define VARIABILI_PREVISTE 8 // va considerata anche la chiave del server, quindi è +1
+#define EXPECTED_CONF_VARS 8 // va considerata anche la chiave del server, quindi è +1
 
 /**
     @brief  Contiene l'insieme di errori che possono verificarsi durante la lettura del config.

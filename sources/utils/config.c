@@ -23,9 +23,9 @@ int loadConfig(Config* conf, char* posConfig) {
 
     char *saveptr;
 
-    while(getline(&riga, &lun, fp) != -1) { // getting line
-        if(riga[0] != '#' && riga[0] != '\n') { // here the row can be a comment or new line
-            if(containsCharacter('=', riga) && riga[0] != '=') { // here must be a variabile (or an illegal value)
+    while(getline(&riga, &lun, fp) != -1) { // ottenimento riga
+        if(riga[0] != '#' && riga[0] != '\n') { // la riga può essere un commento o una nuova riga (\n)
+            if(containsCharacter('=', riga) == 0 && riga[0] != '=') { // da qui in poi deve essere una variabile (o un valore illegale)
                 variabile = strtok_r(riga, "=", &saveptr);
                 if(variabile != NULL) {
                     valore = strtok_r(NULL, "=", &saveptr);
@@ -35,7 +35,7 @@ int loadConfig(Config* conf, char* posConfig) {
                             ppf(CLR_INFO); printSave(">> %s: %s", variabile, valore); ppff();
                         #endif
                         if(strcmpnl(variabile, "!SERVER_KEY") == 0) {
-                            if(strcmpnl(valore, KEY) != 0) { // if server key is not the same of constant then stop
+                            if(strcmpnl(valore, KEY) != 0) { // se la chiave non corrisponde allora stop
                                 return ERR_INVALIDKEY;
                             }
                             v++;
@@ -78,21 +78,21 @@ int loadConfig(Config* conf, char* posConfig) {
                             v++;
                         }
                     } else {
-                        return ERR_EMPTYVALUE; // value after = is empty
+                        return ERR_EMPTYVALUE; // il valore dopo il carattere "=" è vuoto
                     }
                 }
             } else {
-                return ERR_ILLEGAL; // illegal character or variable (=123 is illegal)
+                return ERR_ILLEGAL; // carattere o variabile illegale ("=123" è illegale)
             }
         }
     }
     free(riga);
 	fclose(fp);
 
-    if(v == VARIABILI_PREVISTE) {
+    if(v == EXPECTED_CONF_VARS) {
         return 0;
     } else {
-        return ERR_UNSETVALUES; // if the number of variables is less than expected then return error
+        return ERR_UNSETVALUES; // se il numero di variabili è meno del previsto allora restituisco errore
     }
 }
 

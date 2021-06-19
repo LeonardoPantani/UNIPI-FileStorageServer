@@ -22,25 +22,30 @@
 #include "list.h"
 #include "statistics.h"
 
-FILE* fileLog;
+FILE* fileLog;  // puntatore al file di log del client
 pthread_mutex_t mutexFileLog = PTHREAD_MUTEX_INITIALIZER;
 
-Statistics stats = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+Statistics stats = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}; // contatori statistiche
 pthread_mutex_t mutexStatistiche = PTHREAD_MUTEX_INITIALIZER;
 
-hashtable_t *ht = NULL;
+hashtable_t *ht = NULL; // hashtable in cui sono salvati i file
 pthread_mutex_t mutexHT = PTHREAD_MUTEX_INITIALIZER;
 
-List *coda_client = NULL;
+List *coda_client = NULL; // coda di client in attesa che un worker si occupi di loro
 pthread_mutex_t mutexCodaClient = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t clientInAttesa = PTHREAD_COND_INITIALIZER;
 
-volatile sig_atomic_t chiusuraForte  = FALSE;
-volatile sig_atomic_t chiusuraDebole = FALSE;
+volatile sig_atomic_t chiusuraForte  = FALSE; // termina immediatamente tutto
+volatile sig_atomic_t chiusuraDebole = FALSE; // termina dopo la fine delle richieste client
 pthread_mutex_t mutexChiusura = PTHREAD_MUTEX_INITIALIZER;
 
-
-void cleanHT(hashtable_t* hasht) {
+/**
+ * @brief   Pulisce i data di ogni elemento della hashtable.
+ * @note    Funzione interna
+ * 
+ * @param   hasht   Tabella da ripulire
+**/
+static void cleanHT(hashtable_t* hasht) {
     hash_elem_it it = HT_ITERATOR(ht);
     char* k = ht_iterate_keys(&it);
     while(k != NULL) {
@@ -51,7 +56,14 @@ void cleanHT(hashtable_t* hasht) {
     ht_destroy(hasht);
 }
 
-char* findOldFile(hashtable_t* hasht) {
+/**
+ * @brief   Trova un file da sostituire.
+ * 
+ * @param hasht Tabella su cui cercare file
+ * 
+ * @returns la chiave dell'elemento da rimuovere
+*/
+static char* findOldFile(hashtable_t* hasht) {
 	hash_elem_it it = HT_ITERATOR(hasht);
 
 	char* currentKey = ht_iterate_keys(&it);
@@ -81,9 +93,19 @@ char* findOldFile(hashtable_t* hasht) {
     return oldKey;
 }
 
-
-static int checkLimits(Message* msg, int which) {
-    if(stats.current_bytes_used + msg->data_length > config.max_memory_size && (which == 1 || which == 3)) { // l'inserimento del file causerebbe sforamento limiti memoria
+/**
+ * @brief   Controlla se i limiti di file salvati e memoria vengono superati
+ *          all'inserimento di un nuovo file o meno.
+ * 
+ * @param   data_length Quantità di dati da caricare
+ * @param   which       Quale controllo fare
+ *                      1 -> controllo limite memoria
+ *                      2 -> controllo quantità file
+ *                      3 -> entrambi
+ * @returns 0 se non ci sono problemi, -1 se si supererebbe il limite di spazio in memoria, -2 se si supererebbe il limite di file in memoria
+**/
+static int checkLimits(int data_length, int which) {
+    if(stats.current_bytes_used + data_length > config.max_memory_size && (which == 1 || which == 3)) { // l'inserimento del file causerebbe sforamento limiti memoria
         return -1;
     } else if(stats.current_files_saved + 1 > config.max_files && (which == 2 || which == 3)) { // l'inserimento del file causerebbe sforamento limiti quantità file
         return -2;
@@ -93,13 +115,23 @@ static int checkLimits(Message* msg, int which) {
 }
 
 
+/**
+ * @brief   Gestisce l'espulsione di uno o più file per fare spazio ad uno nuovo in ingresso.
+ * 
+ * @param   msg                     Messaggio contenente info sul file a cui fare spazio
+ * @param   socketConnection        Dove inviare il messaggio
+ * @param   numGestoreConnessione   ID del worker che gestisce la connessione
+ * @param   controllo               Che limiti deve controllare per vedere se espellere un file o no
+ * 
+ * @returns 0 se l'operazione si è completata senza problemi, -1 in caso di problemi con l'espulsione di un file
+**/
 int expellFiles(Message* msg, int socketConnection, int numGestoreConnessione, int controllo) {
     int esito = 0;
     Message* risposta = cmalloc(sizeof(Message));
 
     setMessage(risposta, ANS_UNKNOWN, 0, NULL, NULL, 0);
 
-    int esitoControllo = checkLimits(msg, controllo);
+    int esitoControllo = checkLimits(msg->data_length, controllo);
     
     if(esitoControllo != 0) {
         ppf(CLR_HIGHLIGHT); printSave("GC %d > Controllo limitazioni con ID %d", numGestoreConnessione, controllo); ppff();
@@ -128,7 +160,7 @@ int expellFiles(Message* msg, int socketConnection, int numGestoreConnessione, i
             
             if(oldFile->data_length > 0) free(oldFile->data);
             free(ht_remove(ht, oldFile->path));
-        } while((esitoControllo = checkLimits(msg, controllo)) != 0);
+        } while((esitoControllo = checkLimits(msg->data_length, controllo)) != 0);
 
         setMessage(risposta, ANS_STREAM_END, 0, NULL, NULL, 0);
         checkStop(sendMessage(socketConnection, risposta) == -1, "errore invio messaggio fine flush");
@@ -500,10 +532,6 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
             setMessage(risposta, ANS_BAD_RQST, 0, NULL, testo, strlen(testo));
         }
     }
-
-    #ifdef DEBUG_VERBOSE
-    printFiles(ht);
-    #endif
 
     return risposta;
 }

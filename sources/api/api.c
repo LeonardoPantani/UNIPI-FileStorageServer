@@ -7,7 +7,7 @@
 #include "api.h"
 
 int setSocketAssociation(int fd, char* socketname) {
-    if(sockAssocArrIter >= 10) return -1;
+    if(sockAssocArrIter >= MAX_SOCKETS) return -1;
 
     SocketAssociation ass;
     ass.fd = fd;
@@ -102,7 +102,7 @@ int openConnection(const char* sockname, int msec, const struct timespec abstime
             printf("CLIENT> Connessione fallita.\n"); fflush(stdout);
         } else {
             printf("CLIENT> Connessione effettuata.\n"); fflush(stdout);
-            setSocketAssociation(socket_fd, (char*)sockname);
+            checkM1(setSocketAssociation(socket_fd, (char*)sockname) != 0, "creazione associazione fd-sockname");
             return socket_fd;
         }
 

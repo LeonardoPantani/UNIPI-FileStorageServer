@@ -74,7 +74,7 @@ int readMessage(int fd, Message* msg) {
 
     if(ret == 0) return -1; // connessione chiusa dall'altro partecipante (nessun byte letto)
 
-    // leggo data dinamicamente (se è 0 la lunghezza non leggo nulla)
+    // leggo data dinamicamente (se è 0 la lunghezza non ricevo niente)
     if(msg->data_length > 0 && msg->data != NULL) {
         msg->data = cmalloc(msg->data_length+1);
 

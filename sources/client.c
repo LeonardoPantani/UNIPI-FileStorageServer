@@ -22,7 +22,7 @@
 
 #include "api.h"
 
-FILE* fileLog;
+FILE* fileLog; // puntatore al file di log del client
 pthread_mutex_t mutexFileLog = PTHREAD_MUTEX_INITIALIZER;
 
 int verbose = FALSE; // stampa per ogni operazione
@@ -33,9 +33,10 @@ char ejectedFileFolder[PATH_MAX]; // -D savedFilePath dove salvare file espulsi 
 
 char savedFileFolder[PATH_MAX]; // -d savedFilePath dove salvare i file letti dal server (serve r|R)
 
-pthread_mutex_t mutexChiusura = PTHREAD_MUTEX_INITIALIZER;
-
-void help(void) {
+/**
+ * @brief   Stampa la schermata di aiuto del client.
+**/
+static void help(void) {
     ppf(CLR_HIGHLIGHT); printf("Utilizzo:\n"); ppff();
     ppf(CLR_INFO); printf("    -h                 \033[0m->\033[94m stampa questa lista\n"); ppff();
     ppf(CLR_INFO); printf("    -f <filename>      \033[0m->\033[94m specifica il nome del socket a cui connettersi\n"); ppff();
@@ -52,9 +53,18 @@ void help(void) {
     ppf(CLR_INFO); printf("    -p                 \033[0m->\033[94m abilita le stampe sull'stdout di ogni operazione\n"); ppff();
 }
 
-static int writeOnFile(char* filePath, struct stat properties) {
+/**
+ * @brief   Scrive un file al percorso specificato sul server.
+ * @note    Se un file non viene creato allora si prova ad aprirlo e basta.
+ *          In entrambi i casi si prova a scrivere il contenuto di filePath e poi si chiude il file remoto.
+ * 
+ * @param   filePath    Percorso del file da scrivere
+ * @param   properties  Proprietà del file
+ * @param   ejectedDest Cartella di destinazione dei file ricevuti dal server in caso di espulsione
+**/
+static int writeOnFile(char* filePath, struct stat properties, char ejectedDest[]) {
     if(openFile(filePath, O_CREATE) == 0) { // se il file non esiste lo creo, ci scrivo e lo chiudo
-        if(writeFile(filePath, ejectedFileFolder) == 0) { 
+        if(writeFile(filePath, ejectedDest) == 0) { 
             if(closeFile(filePath) == 0) {
                 return 1;
             }
@@ -67,7 +77,7 @@ static int writeOnFile(char* filePath, struct stat properties) {
         void* data = cmalloc(sizeof(char)*properties.st_size);
 
         if(fread(data, 1, properties.st_size, filePointer) == properties.st_size) { // se la lettura ha successo
-            if(appendToFile(filePath, data, properties.st_size, ejectedFileFolder) == 0) {
+            if(appendToFile(filePath, data, properties.st_size, ejectedDest) == 0) {
                 if(closeFile(filePath) == 0) {
                     fclose(filePointer);
                     free(data);
@@ -83,6 +93,15 @@ static int writeOnFile(char* filePath, struct stat properties) {
     return 0;
 }
 
+/**
+ * @brief   Scrive un insieme di file contenuti in una cartella sul server.
+ * @note    Ricorsiva
+ * 
+ * @param   folderPath  Percorso della cartella da cui prendere i file
+ * @param   numFiles    Numero di file da inviare
+ * @param   completed   (interno) conta i file inviati
+ * @param   total       (interno) conta i file totali
+**/
 static int sendFilesList(char* folderPath, int numFiles, int completed, int total) {
     if(numFiles > 0 || numFiles == -1) {
         DIR* folder;
@@ -105,7 +124,7 @@ static int sendFilesList(char* folderPath, int numFiles, int completed, int tota
                         continue;
                     sendFilesList(path, numFiles, completed, total);
                 } else { // è un file
-                    completed += writeOnFile(path, properties);
+                    completed += writeOnFile(path, properties, ejectedFileFolder);
                     total++;
                     
                     if(numFiles != -1) numFiles--;
@@ -118,7 +137,12 @@ static int sendFilesList(char* folderPath, int numFiles, int completed, int tota
     return total-completed;
 }
 
-
+/**
+ * @brief   Funzione chiave, esegue una azione in base a determinati parametri.
+ * 
+ * @param ac            Codice identificativo dell'azione da elaborare
+ * @param parameters    Parametri passati all'azione
+**/
 static int executeAction(ActionType ac, char* parameters) {
     char* savePointer;
     char* filePath;
@@ -176,7 +200,7 @@ static int executeAction(ActionType ac, char* parameters) {
 
                 if(stat(filePath, &properties) == 0) {
                     if(S_ISDIR(properties.st_mode) == 0) {
-                        completed += writeOnFile(filePath, properties);
+                        completed += writeOnFile(filePath, properties, ejectedFileFolder);
                     } else {
                         ppf(CLR_ERROR); printSave("CLIENT> '%s' è una cartella.", filePath); ppff();
                     }
@@ -535,11 +559,9 @@ int main(int argc, char* argv[]) {
 
         fclose(fileLog);
         free(socketPath);
-
-		return 0;
 	} else {
 		ppf(CLR_ERROR); printf("CLIENT> Fornisci almeno un argomento; usa -h se non sei sicuro\n"); ppff();
-		return 0;
 	}
+
     return 0;
 }

@@ -57,7 +57,7 @@ void* cmalloc(size_t size);
  * @param ago       simbolo da cercare
  * @param pagliaio  stringa in cui cercare
  * 
- * @return 1 se il simbolo è trovato, 0 altrimenti
+ * @return 0 se il simbolo è trovato, -1 altrimenti
 **/
 int containsCharacter(char ago, char* pagliaio);
 
@@ -103,7 +103,7 @@ int timespecDiff(struct timespec tempoInizio, struct timespec tempoFine, struct 
  * @param s1    Stringa 1
  * @param s2    Stringa 2
  * 
- * @returns 0 se sono uguali, 1 altrimenti
+ * @returns 0 se sono le due stringhe sono uguali, -1 altrimenti
 **/
 int strcmpnl(const char *s1, const char *s2);
 

@@ -10,7 +10,7 @@ void* cmalloc(size_t size) {
     void *ret = malloc(size);
 
     if(ret == NULL) {
-        perror("Errore allocazione memoria: ");
+        perror("Errore allocazione memoria");
         exit(EXIT_FAILURE);
     }
 
@@ -21,9 +21,9 @@ void* cmalloc(size_t size) {
 int containsCharacter(char ago, char* pagliaio) {
     for(unsigned int i = 0; i < strlen(pagliaio); i++) {
         if(pagliaio[i] == ago)
-            return 1;
+            return 0;
     }
-    return 0;
+    return -1;
 }
 
 
@@ -72,7 +72,7 @@ int strcmpnl(const char *s1, const char *s2) {
         s2c = *(s2++);
         if (s1c == '\n') s1c = 0;
         if (s2c == '\n') s2c = 0;
-        if (s1c != s2c) return 1;
+        if (s1c != s2c) return -1;
     } while (s1c);
 
     return 0;

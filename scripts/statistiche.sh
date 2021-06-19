@@ -1,6 +1,7 @@
 #!/bin/bash
-# FILE CHE STAMPA LE STATISTICHE FORMATTATE
+# FILE CHE STAMPA A SCHERMO LE STATISTICHE FORMATTATE
 #
+# Autore: Leonardo Pantani
 #
 NOMESCRIPT=${0##*/}
 
@@ -53,6 +54,7 @@ echo -e "$blocked_connections"
 echo ''
 echo -e "ID WORKER\t#RICHIESTE ESEGUITE"
 
+# le richieste per worker sono salvate in questo formato (numWorker:numRichieste | ES: 0:0 1:0 2:0)
 read -r -u 4 riga
 for worker in $riga; do
     nWorker=$(echo $worker | cut -d ':' -f1)
