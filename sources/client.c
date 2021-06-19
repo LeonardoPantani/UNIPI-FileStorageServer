@@ -34,6 +34,43 @@ char ejectedFileFolder[PATH_MAX]; // -D savedFilePath dove salvare file espulsi 
 char savedFileFolder[PATH_MAX]; // -d savedFilePath dove salvare i file letti dal server (serve r|R)
 
 /**
+ * @brief   Controlla se i parametri ricevuti in ingresso sono validi.
+ * @note    Funzione interna.
+ * 
+ * @param   actionList      Lista di azioni
+ * @param   parameterList   Lista di parametri
+ * @param   maxActions      Azioni massime
+ * 
+ * @returns 0 se va tutto bene, -1 se un parametro non rispetta le specifiche
+**/
+static int checkProgramParameters(ActionType actionList[], int totalActions, char eff[], char sff[]) {
+    int ok = 0;
+    int required_R = 0, required_W = 0;
+
+    if(strcmp(eff, "#") != 0) required_R = 1;
+    if(strcmp(sff, "#") != 0) required_W = 1;
+
+    for(int i = 0; i < totalActions && (required_R == 1 || required_W == 1); i++) {
+        if(required_R == 1 && (actionList[i] == AC_READ_LIST || actionList[i] == AC_READ_RECU))
+            required_R = -1;
+        if(required_W == 1 && (actionList[i] == AC_WRITE_LIST || actionList[i] == AC_WRITE_RECU))
+            required_W = -1;
+    }
+
+    // sono stati cercati e non sono stati trovati
+    if(required_R == 1) {
+        ok = -1;
+        ppf(CLR_IMPORTANT); printf("CLIENT> L'opzione -d richiede almeno un'operazione dei tipi: -r oppure -R\n"); ppff();
+    } 
+    if(required_W == 1) {
+        ok = -1;
+        ppf(CLR_IMPORTANT); printf("CLIENT> L'opzione -D richiede almeno un'operazione dei tipi: -w oppure -W\n"); ppff();
+    } 
+
+    return ok;
+}
+
+/**
  * @brief   Stampa la schermata di aiuto del client.
 **/
 static void help(void) {
@@ -333,235 +370,252 @@ static int executeAction(ActionType ac, char* parameters) {
 
 
 int main(int argc, char* argv[]) {
-	if(argc > 1) {
-		int opt;
-        
-        ActionType actionList[MAX_CLIENT_ACTIONS];
-        char parameterList[MAX_CLIENT_ACTIONS][PATH_MAX];
+	if(argc <= 1) {
+        ppf(CLR_ERROR); printf("CLIENT> Fornisci almeno un argomento; usa -h se non sei sicuro\n"); ppff();
+        return -1;
+    }
 
-        int actions = 0;
+    int opt;
+    
+    ActionType actionList[MAX_CLIENT_ACTIONS];
+    char parameterList[MAX_CLIENT_ACTIONS][PATH_MAX];
 
-        DIR* folder;
-        strcpy(ejectedFileFolder, "#"); // imposta il valore iniziale su #
-        strcpy(savedFileFolder, "#"); // imposta il valore iniziale su #
+    int actions = 0;
 
-        // INIZIALIZZO FILE LOG
-        fileLog = fopen("TestDirectory/output/Client/client_log.txt", "w+");
-        checkStop(fileLog == NULL, "creazione file log");
+    DIR* folder;
+    strcpy(ejectedFileFolder, "#"); // imposta il valore iniziale su #
+    strcpy(savedFileFolder, "#"); // imposta il valore iniziale su #
 
-		while ((opt = getopt(argc,argv, ":hf:w:W:D:r:R:d:t:l:u:c:p")) != -1) {
-			switch(opt) {
-				case 'h': // aiuto
-                    help();
+    // INIZIALIZZO FILE LOG
+    fileLog = fopen("TestDirectory/output/Client/client_log.txt", "w+");
+    checkStop(fileLog == NULL, "creazione file log");
+
+    while ((opt = getopt(argc,argv, ":hf:w:W:D:r:R:d:t:l:u:c:p")) != -1) {
+        switch(opt) {
+            case 'h': // aiuto
+                help();
+            break;
+            
+            case 'f': // imposta il socket a cui connettersi
+                socketPath = cmalloc(PATH_MAX);
+                memset(socketPath, 0, PATH_MAX);
+                strcpy(socketPath, optarg);
+                if(verbose) { ppf(CLR_HIGHLIGHT); printSave("CLIENT> Socket impostato su %s.", socketPath); ppff(); }
+            break;
+
+            case 'w': { // salva i file contenuti in una cartella su server
+                actionList[actions] = AC_WRITE_RECU;
+                strcpy(parameterList[actions], optarg);
+                actions++;
+                if(verbose) { ppf(CLR_INFO); printSave("CLIENT> Operazione AC_WRITE_RECU (-w) in attesa."); ppff(); }
                 break;
-                
-                case 'f': // imposta il socket a cui connettersi
-                    socketPath = cmalloc(PATH_MAX);
-                    memset(socketPath, 0, PATH_MAX);
-                    strcpy(socketPath, optarg);
-                    if(verbose) { ppf(CLR_HIGHLIGHT); printf("CLIENT> Socket impostato su %s millisecondi.\n", socketPath); ppff(); }
-                break;
+            }
 
-                case 'w': { // salva i file contenuti in una cartella su server
-                    actionList[actions] = AC_WRITE_RECU;
-                    strcpy(parameterList[actions], optarg);
-                    actions++;
-                    if(verbose) { ppf(CLR_INFO); printf("CLIENT> Operazione AC_WRITE_RECU (-w) in attesa.\n"); ppff(); }
+            case 'W': { // salva i file separati da virgola
+                actionList[actions] = AC_WRITE_LIST;
+                strcpy(parameterList[actions], optarg);
+                actions++;
+                if(verbose) { ppf(CLR_INFO); printSave("CLIENT> Operazione AC_WRITE_LIST (-W) in attesa."); ppff(); }
+                break;
+            }
+
+            case 'D': { // cartella dove salvare file espulsi dal server (INSIEME A w|W!)
+                if((folder = opendir(optarg)) == NULL) {
+                    ppf(CLR_ERROR); printSave("CLIENT> Cartella specificata '%s' inesistente (-D).", optarg); ppff();
+                    free(folder);
                     break;
                 }
+                closedir(folder);
+                strcpy(ejectedFileFolder, optarg);
+                if(verbose) { ppf(CLR_HIGHLIGHT); printSave("CLIENT> Cartella impostata su '%s' (-D).", optarg); ppff(); }
+                break;
+            }
 
-                case 'W': { // salva i file separati da virgola
-                    actionList[actions] = AC_WRITE_LIST;
-                    strcpy(parameterList[actions], optarg);
-                    actions++;
-                    if(verbose) { ppf(CLR_INFO); printf("CLIENT> Operazione AC_WRITE_LIST (-W) in attesa.\n"); ppff(); }
+            case 'r': { // lista di file da leggere dal server separati da virgola
+                actionList[actions] = AC_READ_LIST;
+                strcpy(parameterList[actions], optarg);
+                actions++;
+                if(verbose) { ppf(CLR_INFO); printSave("CLIENT> Operazione AC_READ_LIST (-r) in attesa."); ppff(); }
+                break;
+            }
+
+            case 'R': { // legge n file qualsiasi dal server (se n=0 vengono letti tutti)
+                actionList[actions] = AC_READ_RECU;
+                strcpy(parameterList[actions], optarg);
+                actions++;
+                if(verbose) { ppf(CLR_INFO); printSave("CLIENT> Operazione AC_READ_RECU (-R *n*) in attesa."); ppff(); }
+                break;
+            } 
+
+            case 'd': { // cartella dove salvare file letti con la r oppure R (INSIEME A r|R!)
+                if((folder = opendir(optarg)) == NULL) {
+                    ppf(CLR_ERROR); printSave("CLIENT> Cartella specificata '%s' inesistente (-d).", optarg); ppff();
+                    free(folder);
                     break;
                 }
+                closedir(folder);
+                strcpy(savedFileFolder, optarg);
+                if(verbose) { ppf(CLR_HIGHLIGHT); printSave("CLIENT> Cartella impostata su '%s' (-d).", optarg); ppff(); }
+                break;
+            }
 
-                case 'D': { // cartella dove salvare file espulsi dal server (INSIEME A w|W!)
-                    if((folder = opendir(optarg)) == NULL) {
-                        ppf(CLR_ERROR); printf("CLIENT> Cartella specificata '%s' inesistente (-D).\n", optarg); ppff();
-                        free(folder);
+            case 't': { // specifica tempo tra una richiesta e l'altra in ms
+                timeoutRequests = atol(optarg);
+                if(verbose) { ppf(CLR_INFO); printSave("CLIENT> Tempo tra una richiesta e l'altra: %ld (-t).", timeoutRequests); ppff(); }
+                break;
+            }
+
+            case 'l': { // lista di nomi di cui acquisire mutex | NON IMPL.
+                actionList[actions] = AC_ACQUIRE_MUTEX;
+                strcpy(parameterList[actions], optarg);
+                actions++;
+                if(verbose) { ppf(CLR_INFO); printSave("CLIENT> Operazione AC_ACQUIRE_MUTEX (-l) in attesa."); ppff(); }
+                break;
+            }
+
+            case 'u': { // lista di nomi di cui rilasciare mutex | NON IMPL.
+                actionList[actions] = AC_RELEASE_MUTEX;
+                strcpy(parameterList[actions], optarg);
+                actions++;
+                if(verbose) { ppf(CLR_INFO); printSave("CLIENT> Operazione AC_RELEASE_MUTEX (-u) in attesa."); ppff(); }
+                break;
+            }
+
+            case 'c': { // lista di file da rimuovere dal server
+                actionList[actions] = AC_DELETE;
+                strcpy(parameterList[actions], optarg);
+                actions++;
+                if(verbose) { ppf(CLR_INFO); printSave("CLIENT> Operazione AC_DELETE (-c) in attesa."); ppff(); }
+                break;
+            }
+
+            case 'p': { // attiva la modalità verbose che stampa roba
+                verbose = TRUE;
+                if(verbose) { ppf(CLR_INFO); printSave("CLIENT> Verbose ATTIVATO (-p)."); ppff(); }
+                break;
+            }
+
+            case ':': { // manca un argomento
+                switch(optopt) {
+                    case 'R': {
+                        actionList[actions] = AC_READ_RECU;
+                        strcpy(parameterList[actions], "0");
+                        actions++;
+                        if(verbose) { ppf(CLR_INFO); printSave("CLIENT> Operazione AC_READ_RECU (-R *0*) in attesa."); ppff(); }
                         break;
                     }
-                    closedir(folder);
-                    strcpy(ejectedFileFolder, optarg);
-                    if(verbose) { ppf(CLR_HIGHLIGHT); printf("CLIENT> Cartella impostata su '%s' (-D).\n", optarg); ppff(); }
-                    break;
-                }
 
-                case 'r': { // lista di file da leggere dal server separati da virgola
-                    actionList[actions] = AC_READ_LIST;
-                    strcpy(parameterList[actions], optarg);
-                    actions++;
-                    if(verbose) { ppf(CLR_INFO); printf("CLIENT> Operazione AC_READ_LIST in attesa.\n"); ppff(); }
-                    break;
-                }
-
-                case 'R': { // legge n file qualsiasi dal server (se n=0 vengono letti tutti)
-                    actionList[actions] = AC_READ_RECU;
-                    strcpy(parameterList[actions], optarg);
-                    actions++;
-                    if(verbose) { ppf(CLR_INFO); printf("CLIENT> Operazione AC_READ_RECU in attesa.\n"); ppff(); }
-                    break;
-                } 
-
-                case 'd': { // cartella dove salvare file letti con la r oppure R (INSIEME A r|R)
-                    if((folder = opendir(optarg)) == NULL) {
-                        ppf(CLR_ERROR); printf("CLIENT> Cartella specificata '%s' inesistente (-d).\n", optarg); ppff();
-                        free(folder);
-                        break;
+                    default: {
+                        ppf(CLR_ERROR); printSave("CLIENT> Argomento %c non valido", optopt); ppff();
                     }
-                    closedir(folder);
-                    strcpy(savedFileFolder, optarg);
-                    if(verbose) { ppf(CLR_HIGHLIGHT); printf("CLIENT> Cartella impostata su '%s' (-d).\n", optarg); ppff(); }
-                    break;
                 }
-
-                case 't': { // specifica tempo tra una richiesta e l'altra in ms
-                    timeoutRequests = atol(optarg);
-                    if(verbose) { ppf(CLR_INFO); printf("CLIENT> Tempo tra una richiesta e l'altra: %ld\n", timeoutRequests); ppff(); }
-                    break;
-                }
-
-                case 'l': { // lista di nomi di cui acquisire mutex
-                    actionList[actions] = AC_ACQUIRE_MUTEX;
-                    strcpy(parameterList[actions], optarg);
-                    actions++;
-                    if(verbose) { ppf(CLR_INFO); printf("CLIENT> Operazione AC_ACQUIRE_MUTEX in attesa.\n"); ppff(); }
-                    break;
-                }
-
-                case 'u': { // lista di nomi di cui rilasciare mutex
-                    actionList[actions] = AC_RELEASE_MUTEX;
-                    strcpy(parameterList[actions], optarg);
-                    actions++;
-                    if(verbose) { ppf(CLR_INFO); printf("CLIENT> Operazione AC_RELEASE_MUTEX in attesa.\n"); ppff(); }
-                    break;
-                }
-
-                case 'c': { // lista di file da rimuovere dal server
-                    actionList[actions] = AC_DELETE;
-                    strcpy(parameterList[actions], optarg);
-                    actions++;
-                    if(verbose) { ppf(CLR_INFO); printf("CLIENT> Operazione AC_DELETE in attesa.\n"); ppff(); }
-                    break;
-                }
-
-                case 'p': { // attiva la modalità verbose che stampa roba
-                    verbose = TRUE;
-                    if(verbose) { ppf(CLR_INFO); printf("CLIENT> Verbose ATTIVATO.\n"); ppff(); }
-                    break;
-                }
-
-				case ':': { // manca un argomento
-					ppf(CLR_ERROR); printf("CLIENT> Argomento %c non valido\n", optopt); ppff();
-				    break;
-                }
-
-				case '?': { // opzione non valida
-					ppf(CLR_ERROR); printf("CLIENT> Argomento %c non riconosciuto\n", optopt); ppff();
-				    break;
-                }
-
-				default:
-
                 break;
-			}
-		}
-
-        if(socketPath == NULL) {
-            return -1;
-        }
-        
-
-        int socketConnection;
-
-        struct timespec maxTimeout; maxTimeout.tv_nsec = 0; maxTimeout.tv_sec  = 10;
-
-        if((socketConnection = openConnection(socketPath, 1000, maxTimeout)) == -1) { // connessione fallita
-            pe("CLIENT> Errore durante la connessione");
-            fclose(fileLog);
-            free(socketPath);
-            return -1;
-        }
-
-        
-
-        // connessione stabilita
-        struct sigaction s;
-        memset(&s, 0, sizeof(s));
-        s.sa_handler = SIG_IGN;
-        // ignoro SIGPIPE per evitare di essere terminato da una scrittura su un socket chiuso
-        if ((sigaction(SIGPIPE, &s, NULL)) == -1) {
-            pe("CLIENT> Errore sigaction");
-            fclose(fileLog);
-            free(socketPath);
-            return -1;
-        }
-
-        // === INIZIO COMUNICAZIONE CON SERVER ===
-        // creo variabile per contenere richieste
-        Message* msg = cmalloc(sizeof(Message));
-        // fine variabile per contenere richieste
-        setMessage(msg, ANS_UNKNOWN, 0, NULL, NULL, 0);
-
-        // attendo il messaggio di benvenuto dal server
-        int esito = readMessage(socketConnection, msg);
-        ActionType ac = msg->action;
-        if(esito == 0) {
-            if(ac == ANS_WELCOME) {
-                ppf(CLR_SUCCESS); printSave("CLIENT> Ricevuto WELCOME dal server: %s", msg->data); ppff();
-                free(msg->data);
-
-                char* testo_msg = "Grazie, ci sono";
-                setMessage(msg, ANS_HELLO, 0, NULL, testo_msg, strlen(testo_msg));
-
-                ppf(CLR_INFO); printSave("CLIENT> Rispondo al WELCOME con: %s", testo_msg);
-
-                checkStop(sendMessage(socketConnection, msg) != 0, "msg hello al server iniziale");
-
-                ppf(CLR_SUCCESS); printSave("CLIENT> Inviato HELLO al server con successo!"); ppff();
-            } else if(ac == ANS_MAX_CONN_REACHED) {
-                ppf(CLR_ERROR); printf("CLIENT> Il server ha raggiunto il limite massimo di connessioni.\n"); ppff();
-            } else {
-                ppf(CLR_ERROR); printSave("CLIENT> Il server ha mandato una risposta non valida. ACTION: %d", ac); ppff();
             }
-        }
-        free(msg);
 
-        // imposto tempo tra una richiesta e l'altra
-        struct timespec t;
-        t.tv_sec  = (int)timeoutRequests/1000;
-        t.tv_nsec = (timeoutRequests%1000)*1000000000;
-
-        // se l'ultima richiesta è stata una WELCOME allora inizio ad eseguire le richieste
-        if(ac == ANS_WELCOME) {
-            // eseguo tutte le azioni richieste
-            for(int i = 0; i < actions; i++) {
-                if(executeAction(actionList[i], parameterList[i]) == 0) {
-                    ppf(CLR_SUCCESS); printf("CLIENT> Operazione %s completata con successo\n", getOperationName(actionList[i])); ppff();
-					
-                    if(i+1 < actions) nanosleep(&t, NULL); // aspetto solo se ho ancora operazioni da eseguire
-                } else {
-                    ppf(CLR_ERROR); printf("CLIENT> Operazione %s fallita, motivo: %s (codice errore %d)\n", getOperationName(actionList[i]), strerror(errno), errno); ppff();
-                }
+            case '?': { // opzione non valida
+                ppf(CLR_ERROR); printSave("CLIENT> Argomento %c non riconosciuto", optopt); ppff();
+                break;
             }
+
+            default:
+
+            break;
         }
+    }
 
+    // controllo che i parametri -d e -D siano accompagnati dalle relative richieste
+    if(checkProgramParameters(actionList, actions, ejectedFileFolder, savedFileFolder) != 0) {
+        ppf(CLR_ERROR); printSave("CLIENT> Alcuni parametri forniti non sono validi, ulteriori dettagli specificati sopra. Riprova."); ppff();
+        return -1;
+    }
 
-        // finite le azioni richieste, chiudo la connessione
-		if(closeConnection(socketPath) == 0) {
-            ppf(CLR_INFO); printf("CLIENT> Connessione terminata con successo\n"); ppff();
-        } else {
-            ppf(CLR_ERROR); printf("CLIENT> Connessione non terminata\n"); ppff();
-        }
+    checkM1(socketPath == NULL, "percorso socket nullo");
+    
 
+    int socketConnection;
+
+    struct timespec maxTimeout; maxTimeout.tv_nsec = 0; maxTimeout.tv_sec  = 10;
+
+    if((socketConnection = openConnection(socketPath, 1000, maxTimeout)) == -1) { // connessione fallita
+        pe("CLIENT> Errore durante la connessione");
         fclose(fileLog);
         free(socketPath);
-	} else {
-		ppf(CLR_ERROR); printf("CLIENT> Fornisci almeno un argomento; usa -h se non sei sicuro\n"); ppff();
-	}
+        return -1;
+    }
+
+    
+
+    // connessione stabilita
+    struct sigaction s;
+    memset(&s, 0, sizeof(s));
+    s.sa_handler = SIG_IGN;
+    // ignoro SIGPIPE per evitare di essere terminato da una scrittura su un socket chiuso
+    if ((sigaction(SIGPIPE, &s, NULL)) == -1) {
+        pe("CLIENT> Errore sigaction");
+        fclose(fileLog);
+        free(socketPath);
+        return -1;
+    }
+
+    // === INIZIO COMUNICAZIONE CON SERVER ===
+    // creo variabile per contenere richieste
+    Message* msg = cmalloc(sizeof(Message));
+    // fine variabile per contenere richieste
+    setMessage(msg, ANS_UNKNOWN, 0, NULL, NULL, 0);
+
+    // attendo il messaggio di benvenuto dal server
+    int esito = readMessage(socketConnection, msg);
+    ActionType ac = msg->action;
+    if(esito == 0) {
+        if(ac == ANS_WELCOME) {
+            ppf(CLR_SUCCESS); printSave("CLIENT> Ricevuto WELCOME dal server: %s", msg->data); ppff();
+            free(msg->data);
+
+            char* testo_msg = "Grazie, ci sono";
+            setMessage(msg, ANS_HELLO, 0, NULL, testo_msg, strlen(testo_msg));
+
+            ppf(CLR_INFO); printSave("CLIENT> Rispondo al WELCOME con: %s", testo_msg);
+
+            checkStop(sendMessage(socketConnection, msg) != 0, "msg hello al server iniziale");
+
+            ppf(CLR_SUCCESS); printSave("CLIENT> Inviato HELLO al server con successo!"); ppff();
+        } else if(ac == ANS_MAX_CONN_REACHED) {
+            ppf(CLR_ERROR); printSave("CLIENT> Il server ha raggiunto il limite massimo di connessioni."); ppff();
+        } else {
+            ppf(CLR_ERROR); printSave("CLIENT> Il server ha mandato una risposta non valida. ACTION: %d", ac); ppff();
+        }
+    }
+    free(msg);
+
+    // imposto tempo tra una richiesta e l'altra
+    struct timespec t;
+    t.tv_sec  = (int)timeoutRequests/1000;
+    t.tv_nsec = (timeoutRequests%1000)*1000000000;
+
+    // se l'ultima richiesta è stata una WELCOME allora inizio ad eseguire le richieste
+    if(ac == ANS_WELCOME) {
+        // eseguo tutte le azioni richieste
+        for(int i = 0; i < actions; i++) {
+            if(executeAction(actionList[i], parameterList[i]) == 0) {
+                ppf(CLR_SUCCESS); printSave("CLIENT> Operazione %s completata con successo", getOperationName(actionList[i])); ppff();
+                
+                if(i+1 < actions) nanosleep(&t, NULL); // aspetto solo se ho ancora operazioni da eseguire
+            } else {
+                ppf(CLR_ERROR); printSave("CLIENT> Operazione %s fallita, motivo: %s (codice errore %d)", getOperationName(actionList[i]), strerror(errno), errno); ppff();
+            }
+        }
+    }
+
+
+    // finite le azioni richieste, chiudo la connessione
+    if(closeConnection(socketPath) == 0) {
+        ppf(CLR_INFO); printSave("CLIENT> Connessione terminata con successo"); ppff();
+    } else {
+        ppf(CLR_ERROR); printSave("CLIENT> Connessione non terminata"); ppff();
+    }
+
+    fclose(fileLog);
+    free(socketPath);
 
     return 0;
 }

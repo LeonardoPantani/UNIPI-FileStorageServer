@@ -1,7 +1,7 @@
 /**
  * @file    hashtable.c
  * @brief   Contiene l'implementazione della hash table.
- * @author	Pierre-Henri Symoneaux
+ * @author	Pierre-Henri Symoneaux (https://gist.github.com/phsym/4605704)
 **/
 
 #include "hashtable.h"

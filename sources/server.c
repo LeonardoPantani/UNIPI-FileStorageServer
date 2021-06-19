@@ -39,6 +39,7 @@ volatile sig_atomic_t chiusuraForte  = FALSE; // termina immediatamente tutto
 volatile sig_atomic_t chiusuraDebole = FALSE; // termina dopo la fine delle richieste client
 pthread_mutex_t mutexChiusura = PTHREAD_MUTEX_INITIALIZER;
 
+
 /**
  * @brief   Pulisce i data di ogni elemento della hashtable.
  * @note    Funzione interna
