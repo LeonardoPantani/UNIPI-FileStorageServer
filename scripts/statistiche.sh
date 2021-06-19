@@ -4,7 +4,7 @@
 #
 NOMESCRIPT=${0##*/}
 
-# se non ci sono argomenti
+# se non ci sono argomenti ($# contiene il numero di argomenti passati allo script bash)
 if [ $# = 0 ]; then
     echo -e "${NOMESCRIPT} > Fornisci anche il nome di un file." 1>&2
     exit 1
@@ -12,27 +12,30 @@ fi
 
 # scorro gli argomenti ricevuti
 for argomento do
+    # controllo se il file esiste (-f restituisce VERO se il file esiste ed è un file regolare, -r restituisce VERO se il file è leggibile)
 	if [ -f "$argomento" ] && [ -r $argomento ]; then
 		FILESTATS=$argomento
-    else
+    else # mando messaggio di errore trasferendo l'stdout sull'stderr
         echo "${NOMESCRIPT} > File \"$argomento\" inesistente o non hai i permessi di lettura." 1>&2
         exit 1
     fi
 done
 
-# se il file è vuoto stampo errore
+# se il file è vuoto stampo errore (-s restituisce VERO se il file esiste, FALSO altrimenti)
 if [ ! -s $NOMESCRIPT ]; then
 	echo "${NOMESCRIPT} > Errore, file \"$FILESTATS\" vuoto." 1>&2
 	exit 1
 fi
 
-# apro in lettura lo statfile
+# apro in lettura lo statfile nel descrittore 4
 exec 4< $FILESTATS
 
-# salvo le variabili
+# salvo le variabili lette dal descrittore 4
 read -r -u 4 data avg_read avg_written n_read n_write n_lock n_opencreate n_unlock n_delete n_close max_size_reached max_file_number_reached n_replace_applied max_concurrent_connections blocked_connections
 
+# ottengo la data attuale col fuso orario Europe/Rome
 data=$(TZ=":Europe/Rome" date -d @${data});
+
 # stampo a schermo i risultati
 echo -e "\t======================================================"
 echo -e "\t================ STATISTICHE SERVER =================="

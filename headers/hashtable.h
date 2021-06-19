@@ -1,7 +1,7 @@
 /**
  * @file    hashtable.h
  * @brief   Contiene l'header delle funzioni che lavorano sulla hash table.
- * @author  Leonardo Pantani & Pierre-Henri Symoneaux
+ * @author  Pierre-Henri Symoneaux
 **/
 
 #ifndef HASH_TABLE_H_

@@ -51,7 +51,7 @@ void cleanHT(hashtable_t* hasht) {
     ht_destroy(hasht);
 }
 
-char* findOldFile(hashtable_t* hasht) { // FIXME dà segmentation fault!! da rifare a modo
+char* findOldFile(hashtable_t* hasht) {
 	hash_elem_it it = HT_ITERATOR(hasht);
 
 	char* currentKey = ht_iterate_keys(&it);
@@ -501,19 +501,8 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
         }
     }
 
-    #ifdef DEBUG_VERBOSEE
-    ppf(CLR_WARNING); printSave("------- LISTA ELEMENTI -------"); ppff();
-	hash_elem_it it2 = HT_ITERATOR(ht);
-	char* k = ht_iterate_keys(&it2);
-	while(k != NULL) {
-        el = ht_get(ht, k);
-        if(el == NULL) {
-            break;
-        } 
-		printSave("CHIAVE: %s | AUTORE: %d (%d) | DATA AGGIORNAMENTO: %ld | SPAZIO OCCUPATO: %ld", k, el->author, el->lock, el->updatedDate, el->data_length);
-		k = ht_iterate_keys(&it2);
-	}
-    ppf(CLR_WARNING); printSave("------- FINE LISTA ELEMENTI -------"); ppff();
+    #ifdef DEBUG_VERBOSE
+    printFiles(ht);
     #endif
 
     return risposta;

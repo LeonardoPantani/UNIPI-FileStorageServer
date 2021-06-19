@@ -1,6 +1,6 @@
 /**
  * @file    list.c
- * @brief   Contiene l'implementazione della list dei client in attesa.
+ * @brief   Contiene l'implementazione della lista/array.
  * @author  Leonardo Pantani
 **/
 

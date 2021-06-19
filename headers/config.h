@@ -15,10 +15,13 @@
 
 #include "utils.h"
 
-#define KEY "efhiauefrwhwafghaw2131guys"
+#define KEY "efhiauefrwhwafghaw2131guys" // chiave perché la configurazione venga letta dal server, è una specie di password
 
 #define VARIABILI_PREVISTE 8 // va considerata anche la chiave del server, quindi è +1
 
+/**
+    @brief  Contiene l'insieme di errori che possono verificarsi durante la lettura del config.
+**/
 enum ErroriConfig {
     ERR_FILEOPENING = -1,
     ERR_INVALIDKEY  = -2,
@@ -28,6 +31,9 @@ enum ErroriConfig {
     ERR_ILLEGAL     = -6,
 };
 
+/**
+    @brief  Contiene i parametri di configurazione del server.
+**/
 typedef struct configurazione {
     int max_workers;
     int max_connections;

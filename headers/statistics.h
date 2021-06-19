@@ -12,12 +12,15 @@
 #include "config.h"
 #include "utils.h"
 
-typedef struct {
+/**
+ * @brief   Struttura che definisce l'insieme di statistiche salvate dal server.
+*/
+typedef struct statistics {
     int n_read;
     int n_write;
-    int n_lock;
+    int n_lock; // non usata
     int n_opencreate;
-    int n_unlock;
+    int n_unlock; // non usata
     int n_delete;
     int n_close;
 
@@ -35,7 +38,7 @@ typedef struct {
     int bytes_read;
     int bytes_written;
 
-    int* workerRequests;
+    int* workerRequests; // contiene l'array contenente le richieste servite da ogni worker
 } Statistics;
 
 /**

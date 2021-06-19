@@ -12,6 +12,16 @@
 
 #include "utils.h"
 
+/**
+ * @brief   Struttura che definisce una "lista" di interi, è più un array con alcune funzioni
+ *          che permettono di usarlo come lista.
+ * 
+ * @struct  first       Primo elemento della lista
+ * @struct  last        Ultimo elemento della lista
+ * @struct  array       Array di interi in cui vengono salvati i valori
+ * @struct  maxSlots    Numero massimo di slot (posti)
+ * @struct  usedSlots   Numero utilizzato di slot (posti)
+**/
 typedef struct {
     int first;
     int last;

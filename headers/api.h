@@ -23,13 +23,19 @@
 extern FILE* fileLog;
 extern pthread_mutex_t mutexFileLog;
 
+/**
+    @brief  Struttura che contiene l'associazione tra un nome socket e un file descriptor.
+
+    @struct fd          Descrittore del file
+    @struct socketname  Nome del socket associato al fd
+**/
 typedef struct SocketAssociation {
     int fd;
     char* socketname;
 } SocketAssociation;
 
-SocketAssociation sockAssocArr[10];
-int sockAssocArrIter = 0;
+SocketAssociation sockAssocArr[MAX_SOCKETS]; // array contenente le associazioni tra socket e fd
+int sockAssocArrIter = 0; // iteratore associazione socket
 
 char *socketPath; // nome del socket
 

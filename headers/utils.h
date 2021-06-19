@@ -6,6 +6,7 @@
 
 #ifndef UTILS_H_
 #define UTILS_H_
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -24,8 +25,9 @@
 #define CLR_INFO        90
 #define CLR_DEFAULT     0
 
-#define MAX_TIMESTAMP_SIZE 30
-#define MAX_CLIENT_ACTIONS 100
+#define MAX_TIMESTAMP_SIZE 30   // dimensione del buffer che contiene la data in formato leggibile
+#define MAX_CLIENT_ACTIONS 100  // numero massimo di azioni inviabili da un client
+#define MAX_SOCKETS        10   // numero massimo di associazioni che l'array di associazione socketname-fd contiene
 
 #define checkStop(condizione, messaggio) if(condizione) { fprintf(stderr, "Errore %s (codice %d) | File %s Riga %d (%s)\n", strerror(errno), errno, __FILE__, __LINE__, messaggio); fflush(stderr); exit(EXIT_FAILURE); }
 #define checkNull(condizione, messaggio) if(condizione) { fprintf(stderr, "Errore %s (codice %d) | File %s Riga %d (%s)\n", strerror(errno), errno, __FILE__, __LINE__, messaggio); fflush(stderr); return NULL; }
@@ -91,7 +93,7 @@ void pe(char* string);
  * 
  * @return 1 se la differenza è maggiore di differenza, 0 altrimenti
 **/
-struct timespec;
+struct timespec; // altrimenti dà warning
 int timespecDiff(struct timespec tempoInizio, struct timespec tempoFine, struct timespec differenza);
 
 

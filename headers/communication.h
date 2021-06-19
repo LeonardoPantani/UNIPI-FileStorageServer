@@ -62,6 +62,15 @@ typedef enum {
     AC_DELETE               = 7, // -c
 } ActionType;
 
+/**
+    @brief  Struttura che descrive i messaggi che il server e i client si spediscono.
+
+    @struct  action      Codice dell'azione riferita al messaggio
+    @struct  flags       Intero che definisce il tipo di flag impostato (utile in alcuni casi)
+    @struct  path        Array di caratteri che descrive il percorso riferito ad un file
+    @struct  data_length Intero che definisce la lunghezza del dato da spedire
+    @struct  data        Il dato da spedire
+**/
 typedef struct {
     ActionType  action;
     int         flags;

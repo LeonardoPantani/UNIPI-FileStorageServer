@@ -12,6 +12,13 @@
 
 #include "utils.h"
 
+/**
+ * @brief   Struttura che implementa un nodo di una lista. Non implementata.
+ * 
+ * @struct  next    Il nodo successivo
+ * @struct  key     La chiave relativa al nodo
+ * @struct  data    Il contenuto del nodo
+**/
 typedef struct node {
     struct node* next;
     char *key;
