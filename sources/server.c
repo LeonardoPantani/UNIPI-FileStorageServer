@@ -215,7 +215,12 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
                     }
 
                     /* =========== CONTROLLO NUMERO FILE ================== */
-                    expellFiles(msg, socketConnection, numero, 2);
+                    if(expellFiles(msg, socketConnection, numero, 2) != 0) {
+                        unlocka(mutexHT);
+                        setMessage(risposta, ANS_ERROR, 0, NULL, NULL, 0);
+                        ppf(CLR_ERROR); printSave("GC %d > Impossibile trovare un file da espeller al posto di '%s' (open)", numero, msg->path); ppff();
+                        break;
+                    }
                     /* =========== FINE CONTROLLO NUMERO FILE ================== */
 
                     // modifiche a file
@@ -296,7 +301,12 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
             }
 
             /* =========== CONTROLLO SFORAMENTO MEMORIA ================== */
-            expellFiles(msg, socketConnection, numero, 1);
+            if(expellFiles(msg, socketConnection, numero, 1) != 0) {
+                unlocka(mutexHT);
+                setMessage(risposta, ANS_ERROR, 0, NULL, NULL, 0);
+                ppf(CLR_ERROR); printSave("GC %d > Impossibile trovare un file da espeller al posto di '%s' (write)", numero, msg->path); ppff();
+                break;
+            }
             /* =========== FINE CONTROLLO SFORAMENTO MEMORIA ============= */
             
             // modifiche a file
@@ -451,7 +461,12 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
             }
 
             /* =========== CONTROLLO SFORAMENTO MEMORIA ================== */
-            expellFiles(msg, socketConnection, numero, 1);
+            if(expellFiles(msg, socketConnection, numero, 1) != 0) {
+                unlocka(mutexHT);
+                setMessage(risposta, ANS_ERROR, 0, NULL, NULL, 0);
+                ppf(CLR_ERROR); printSave("GC %d > Impossibile trovare un file da espeller al posto di '%s' (append)", numero, msg->path); ppff();
+                break;
+            }
             /* =========== FINE CONTROLLO SFORAMENTO MEMORIA ============= */
 
             // modifiche a file
