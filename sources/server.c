@@ -528,6 +528,11 @@ void* gestoreConnessione(void* n) {
         checkStop(socketConnection == -1, "rimozione primo elemento dalla coda in attesa fallita");
         printSave("GC %d > Connessione ottenuta dalla coda.", numero);
         
+        locka(mutexStatistiche);
+        stats.current_connections++;
+        if(stats.current_connections > stats.max_concurrent_connections)
+            stats.max_concurrent_connections = stats.current_connections;
+        unlocka(mutexStatistiche);
 
         // === INIZIO A SERVIRE IL CLIENT ===
         Message* msg = cmalloc(sizeof(Message));
@@ -606,9 +611,7 @@ void *gestorePool(void* socket) {
         printSave("GP   > Connessione accettata a un client.");
 
         // controllo se ho già raggiunto il limite massimo di connessioni contemporanee
-        locka(mutexStatistiche);
         if(stats.current_connections == config.max_connections) {
-            unlocka(mutexStatistiche);
             ppf(CLR_ERROR); printSave("GP   > Raggiuto il limite di connessioni contemporanee. Invio messaggio di errore.\n"); ppff();
         
             Message* msg = cmalloc(sizeof(Message));
@@ -621,14 +624,11 @@ void *gestorePool(void* socket) {
             checkStop(sendMessage(socketConnection, msg) != 0, "messaggio connessioni max raggiunto");
             free(msg); // libero memoria del messaggio
 
+            locka(mutexStatistiche);
             stats.blocked_connections++;
+            unlocka(mutexStatistiche);
             continue;
-        } else {
-            stats.current_connections++;
-            if(stats.current_connections > stats.max_concurrent_connections)
-                stats.max_concurrent_connections = stats.current_connections;
         }
-        unlocka(mutexStatistiche);
 
         locka(mutexCodaClient);
         checkStop(addToList(coda_client, socketConnection) == -1, "impossibile aggiungere alla coda dei client in attesa");
