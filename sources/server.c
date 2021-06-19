@@ -25,7 +25,7 @@
 FILE* fileLog;  // puntatore al file di log del client
 pthread_mutex_t mutexFileLog = PTHREAD_MUTEX_INITIALIZER;
 
-Statistics stats = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}; // contatori statistiche
+Statistics stats = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}; // contatori statistiche
 pthread_mutex_t mutexStatistiche = PTHREAD_MUTEX_INITIALIZER;
 
 hashtable_t *ht = NULL; // hashtable in cui sono salvati i file
@@ -206,7 +206,7 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
     switch(msg->action) {
         case REQ_OPEN: {
             switch(msg->flags) {
-                case 0: { // file aperto e basta
+                case 0: { // file aperto
                     if(el == NULL) {
                         unlocka(mutexHT);
                         setMessage(risposta, ANS_FILE_NOT_EXISTS, 0, NULL, NULL, 0);
@@ -229,8 +229,7 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
 
                     // aggiorno le statistiche all'immissione di un file
                     locka(mutexStatistiche);
-                    stats.n_opencreate++;
-                    if(stats.current_files_saved > stats.max_file_number_reached) stats.max_file_number_reached = stats.current_files_saved;
+                    stats.n_open++;
                     unlocka(mutexStatistiche);
 
                     setMessage(risposta, ANS_OK, 0, NULL, NULL, 0);
@@ -250,7 +249,7 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
                     if(expellFiles(msg, socketConnection, numero, 2) != 0) {
                         unlocka(mutexHT);
                         setMessage(risposta, ANS_ERROR, 0, NULL, NULL, 0);
-                        ppf(CLR_ERROR); printSave("GC %d > Impossibile trovare un file da espeller al posto di '%s' (open)", numero, msg->path); ppff();
+                        ppf(CLR_ERROR); printSave("GC %d > Impossibile trovare un file da espellere al posto di '%s' (open)", numero, msg->path); ppff();
                         break;
                     }
                     /* =========== FINE CONTROLLO NUMERO FILE ================== */
@@ -336,7 +335,7 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
             if(expellFiles(msg, socketConnection, numero, 1) != 0) {
                 unlocka(mutexHT);
                 setMessage(risposta, ANS_ERROR, 0, NULL, NULL, 0);
-                ppf(CLR_ERROR); printSave("GC %d > Impossibile trovare un file da espeller al posto di '%s' (write)", numero, msg->path); ppff();
+                ppf(CLR_ERROR); printSave("GC %d > Impossibile trovare un file da espellere al posto di '%s' (write)", numero, msg->path); ppff();
                 break;
             }
             /* =========== FINE CONTROLLO SFORAMENTO MEMORIA ============= */
@@ -496,7 +495,7 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
             if(expellFiles(msg, socketConnection, numero, 1) != 0) {
                 unlocka(mutexHT);
                 setMessage(risposta, ANS_ERROR, 0, NULL, NULL, 0);
-                ppf(CLR_ERROR); printSave("GC %d > Impossibile trovare un file da espeller al posto di '%s' (append)", numero, msg->path); ppff();
+                ppf(CLR_ERROR); printSave("GC %d > Impossibile trovare un file da espellere al posto di '%s' (append)", numero, msg->path); ppff();
                 break;
             }
             /* =========== FINE CONTROLLO SFORAMENTO MEMORIA ============= */

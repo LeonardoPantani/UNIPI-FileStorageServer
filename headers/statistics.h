@@ -19,6 +19,7 @@ typedef struct statistics {
     int n_read;
     int n_write;
     int n_lock; // non usata
+    int n_open;
     int n_opencreate;
     int n_unlock; // non usata
     int n_delete;
