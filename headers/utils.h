@@ -24,6 +24,9 @@
 #define CLR_INFO        90
 #define CLR_DEFAULT     0
 
+#define MAX_TIMESTAMP_SIZE 30
+#define MAX_CLIENT_ACTIONS 100
+
 #define checkStop(condizione, messaggio) if(condizione) { fprintf(stderr, "Errore %s (codice %d) | File %s Riga %d (%s)\n", strerror(errno), errno, __FILE__, __LINE__, messaggio); fflush(stderr); exit(EXIT_FAILURE); }
 #define checkNull(condizione, messaggio) if(condizione) { fprintf(stderr, "Errore %s (codice %d) | File %s Riga %d (%s)\n", strerror(errno), errno, __FILE__, __LINE__, messaggio); fflush(stderr); return NULL; }
 #define checkM1(condizione, messaggio) if(condizione) { fprintf(stderr, "Errore %s (codice %d) | File %s Riga %d (%s)\n", strerror(errno), errno, __FILE__, __LINE__, messaggio); fflush(stderr); return -1; }

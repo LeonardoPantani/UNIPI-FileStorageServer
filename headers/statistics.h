@@ -16,7 +16,7 @@ typedef struct {
     int n_read;
     int n_write;
     int n_lock;
-    int n_openlock;
+    int n_opencreate;
     int n_unlock;
     int n_delete;
     int n_close;

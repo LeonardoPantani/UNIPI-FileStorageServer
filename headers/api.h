@@ -94,8 +94,9 @@ int closeConnection(const char* sockname);
  * 
  * @param pathname percorso relativo al file di cui mandare la richiesta
  * @param flags    imposta una o più flags
+ *                 O_OPEN   -> dice di aprire il file (non necessario, usabile per chiarezza)
  *                 O_CREATE -> dice di creare il file (se c'è già dà errore)
- *                 O_LOCK   -> dice che il file può essere scritto o letto solo dal processo che lo ha creato
+ *                 O_LOCK   -> dice che il file può essere scritto o letto solo dal processo che lo ha creato (non impl.)
  * 
  * @returns 0 in caso di successo, -1 in caso di fallimento (setta errno)
 **/

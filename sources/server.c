@@ -51,11 +51,34 @@ void cleanHT(hashtable_t* hasht) {
     ht_destroy(hasht);
 }
 
-char* findOldFile(hashtable_t hasht) {
-	hash_elem_it it2 = HT_ITERATOR(ht);
-	char* k = ht_iterate_keys(&it2);
+char* findOldFile(hashtable_t* hasht) { // FIXME dà segmentation fault!! da rifare a modo
+	hash_elem_it it = HT_ITERATOR(hasht);
 
-    return k;
+	char* currentKey = ht_iterate_keys(&it);
+    File* currentElem;
+
+    char* oldKey = currentKey;
+    File* oldElem = NULL;
+
+    do {
+        currentElem = (File *)ht_get(hasht, currentKey);
+
+        if(oldElem == NULL) {
+            oldElem = malloc(sizeof(File));
+            *oldElem = *currentElem;
+        }
+
+        if(currentElem->updatedDate < oldElem->updatedDate) {
+            *oldElem = *currentElem;
+            *oldKey = *currentKey;
+        }
+
+        currentKey = ht_iterate_keys(&it);
+    } while(currentKey != NULL);
+
+    free(oldElem);
+
+    return oldKey;
 }
 
 
@@ -84,7 +107,7 @@ int expellFiles(Message* msg, int socketConnection, int numGestoreConnessione, i
         checkStop(sendMessage(socketConnection, risposta) == -1, "errore invio messaggio inizio flush");
 
         do {
-            char* chiave = findOldFile(*ht);
+            char* chiave = findOldFile(ht);
             File* oldFile = ht_get(ht, chiave);
             
             // aggiornamento statistiche
@@ -114,17 +137,22 @@ int expellFiles(Message* msg, int socketConnection, int numGestoreConnessione, i
 }
 
 
-void printFiles() {
+void printFiles(hashtable_t* hasht) {
     ppf(CLR_WARNING); printf("------- LISTA ELEMENTI -------\n"); ppff();
-    hash_elem_it it = HT_ITERATOR(ht);
+    hash_elem_it it = HT_ITERATOR(hasht);
     char* k = ht_iterate_keys(&it);
+    char* opener;
+    char buffer[MAX_TIMESTAMP_SIZE];
+
     while(k != NULL) {
-        File* el = (File *)ht_get(ht, k);
-        printSave("CHIAVE: %-10s | AUTORE: %-5d (aperto da %d) | DATA AGGIORNAMENTO: %-10ld | SPAZIO OCCUPATO: %-10ld", k, el->author, el->openBy, el->updatedDate, el->data_length);
+        File* el = (File *)ht_get(hasht, k);
+        if(el->openBy == -1) opener = "nessuno"; else sprintf(opener, "%d", el->openBy);
+        strftime(buffer, MAX_TIMESTAMP_SIZE, "%c", localtime(&el->updatedDate));
+        printSave("PERCORSO: %-45s | AUTORE: %d (aperto da: %s) | DATA AGGIORNAMENTO: %-10s | SPAZIO OCCUPATO: %ld bytes", k, el->author, opener, buffer, el->data_length);
         fflush(stdout);
         k = ht_iterate_keys(&it);
     }
-    ppf(CLR_WARNING); printf("------ FINE LISTA ELEMENTI ------\n"); ppff();
+    ppf(CLR_WARNING); printf("----- FINE LISTA ELEMENTI ----\n"); ppff();
 }
 
 
@@ -162,7 +190,7 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
 
                     // aggiorno le statistiche all'immissione di un file
                     locka(mutexStatistiche);
-                    stats.n_openlock++;
+                    stats.n_opencreate++;
                     if(stats.current_files_saved > stats.max_file_number_reached) stats.max_file_number_reached = stats.current_files_saved;
                     unlocka(mutexStatistiche);
 
@@ -195,7 +223,7 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
 
                     // aggiornamento statistiche
                     locka(mutexStatistiche);
-                    stats.n_openlock++;
+                    stats.n_opencreate++;
                     stats.current_files_saved++;
                     if(stats.current_files_saved > stats.max_file_number_reached) stats.max_file_number_reached = stats.current_files_saved;
                     unlocka(mutexStatistiche);
@@ -648,7 +676,7 @@ void *attesaSegnali(void* statFile) {
         }
 
         if(segnale == SIGUSR1) {
-            printFiles();
+            printFiles(ht);
         }
 
         if(segnale == SIGUSR2) {
@@ -708,9 +736,9 @@ int main(int argc, char* argv[]) {
 
 
     time_t tempo;
-    char buffer[80];
+    char buffer[MAX_TIMESTAMP_SIZE];
     time(&tempo);
-    strftime(buffer, 80, "%c", localtime(&tempo));
+    strftime(buffer, MAX_TIMESTAMP_SIZE, "%c", localtime(&tempo));
 
     ppf(CLR_INFO); printSave("----- INIZIO SERVER [Data: %s] -----", buffer); ppff();
     
@@ -797,10 +825,11 @@ int main(int argc, char* argv[]) {
     deleteList(coda_client);
 
 	printStats(config.stats_file_name, config.max_workers);
+    printFiles(ht);
     printSave("MAIN > Le statistiche sono state salvate nel file '%s'.", config.stats_file_name);
 
     time(&tempo);
-    strftime(buffer, 80, "%c", localtime(&tempo));
+    strftime(buffer, MAX_TIMESTAMP_SIZE, "%c", localtime(&tempo));
     ppf(CLR_INFO); printSave("----- FINE SERVER [Data: %s] -----", buffer); ppff();
 
     free(copyWR);

@@ -310,8 +310,8 @@ int main(int argc, char* argv[]) {
 	if(argc > 1) {
 		int opt;
         
-        ActionType actionList[100];
-        char parameterList[100][PATH_MAX];
+        ActionType actionList[MAX_CLIENT_ACTIONS];
+        char parameterList[MAX_CLIENT_ACTIONS][PATH_MAX];
 
         int actions = 0;
 

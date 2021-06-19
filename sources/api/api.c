@@ -85,7 +85,7 @@ int openConnection(const char* sockname, int msec, const struct timespec abstime
 
     // differenza tempo
     struct timespec tempoInizio, tempoAttuale;
-    clock_gettime(CLOCK_MONOTONIC, &tempoInizio);
+    checkM1(clock_gettime(CLOCK_MONOTONIC, &tempoInizio), "ottenimento orario iniziale openConnection");
     struct timespec t;
     t.tv_sec  = (int)msec/1000;
     t.tv_nsec = (msec%1000)*1000000;
@@ -142,9 +142,6 @@ int openFile(const char* pathname, int flags) {
                 switch(msg->action) {
                     case ANS_OK: {
                         printSave("OF CLIENT> File '%s' aperto!", pathname);
-                        if(flags == 2 || flags == 3) {
-                            ppf(CLR_IMPORTANT); printSave("OF CLIENT> File '%s' lockato!", pathname); ppff();
-                        }
                         break;
                     }
 
@@ -157,9 +154,6 @@ int openFile(const char* pathname, int flags) {
                         if(readMessage(socketConnection, msg) == 0) {
                             if(msg->action == ANS_OK) {
                                 printSave("OF CLIENT> File '%s' aperto!", pathname);
-                                if(flags == 2 || flags == 3) {
-                                    ppf(CLR_IMPORTANT); printSave("OF CLIENT> File '%s' lockato!", pathname); ppff();
-                                }
                             } else {
                                 ppf(CLR_ERROR); printSave("OF CLIENT> Il server ha mandato una risposta non valida (2). ACTION: %d", msg->action); ppff();
                                 errno = EBADRQC;
