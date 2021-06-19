@@ -69,6 +69,8 @@ int writeOnFile(char* filePath, struct stat properties) {
         if(fread(data, 1, properties.st_size, filePointer) == properties.st_size) { // se la lettura ha successo
             if(appendToFile(filePath, data, properties.st_size, ejectedFileFolder) == 0) {
                 if(closeFile(filePath) == 0) {
+                    fclose(filePointer);
+                    free(data);
                     return 1;
                 }
             }
@@ -486,7 +488,7 @@ int main(int argc, char* argv[]) {
         if(esito == 0) {
             if(ac == ANS_WELCOME) {
                 ppf(CLR_SUCCESS); printSave("CLIENT> Ricevuto WELCOME dal server: %s", msg->data); ppff();
-                //free(msg->data);
+                free(msg->data);
 
                 char* testo_msg = "Grazie, ci sono";
                 setMessage(msg, ANS_HELLO, 0, NULL, testo_msg, strlen(testo_msg));
