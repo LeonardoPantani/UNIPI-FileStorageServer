@@ -180,6 +180,12 @@ int openFile(const char* pathname, int flags) {
                         errno = ENOENT;
                         break;
                     }
+
+                    case ANS_ERROR: {
+                        ppf(CLR_ERROR); printSave("OF CLIENT> Il file '%s' non può essere caricato a causa di un problema interno del server.", pathname); ppff();
+                        errno = EREMOTEIO;
+                        break;
+                    }
                     
                     default: {
                         ppf(CLR_ERROR); printSave("OF CLIENT> Il server ha mandato una risposta non valida. ACTION: %d", msg->action); ppff();
@@ -228,6 +234,12 @@ int readFile(const char* pathname, void** buf, size_t* size) {
                     case ANS_FILE_NOT_EXISTS: {
                         ppf(CLR_ERROR); printSave("RF CLIENT> Il file '%s' non esiste, non può essere letto.", pathname); ppff();
                         errno = ENOENT;
+                        break;
+                    }
+
+                    case ANS_ERROR: {
+                        ppf(CLR_ERROR); printSave("OF CLIENT> Il file '%s' non può essere letto a causa di un problema interno del server.", pathname); ppff();
+                        errno = EREMOTEIO;
                         break;
                     }
 
@@ -291,6 +303,12 @@ int readNFiles(int N, const char* dirname) {
                     case ANS_FILE_NOT_EXISTS: { // non ci sono file da mandare
                         ppf(CLR_ERROR); printSave("RN CLIENT> Il server non possiede file da inviarti."); ppff();
                         errno = ENOENT;
+                        break;
+                    }
+
+                    case ANS_ERROR: {
+                        ppf(CLR_ERROR); printSave("OF CLIENT> Il server ha avuto un problema interno."); ppff();
+                        errno = EREMOTEIO;
                         break;
                     }
 
@@ -396,6 +414,12 @@ int writeFile(const char* pathname, const char* dirname) {
                         break;
                     }
 
+                    case ANS_ERROR: {
+                        ppf(CLR_ERROR); printSave("OF CLIENT> Il file '%s' non può essere scritto a causa di un problema interno del server.", pathname); ppff();
+                        errno = EREMOTEIO;
+                        break;
+                    }
+
                     default: {
                         ppf(CLR_ERROR); printSave("WF CLIENT> Il server ha mandato una risposta non valida. ACTION: %d", msg->action); ppff();
                         errno = EBADRQC;
@@ -467,6 +491,12 @@ int appendToFile(const char* pathname, void* buf, size_t size, const char* dirna
                         break;
                     }
 
+                    case ANS_ERROR: {
+                        ppf(CLR_ERROR); printSave("OF CLIENT> Il file '%s' non può essere scritto a causa di un problema interno del server.", pathname); ppff();
+                        errno = EREMOTEIO;
+                        break;
+                    }
+
                     default: {
                         ppf(CLR_ERROR); printSave("AF CLIENT> Il server ha mandato una risposta non valida. ACTION: %d", msg->action); ppff();
                         errno = EBADRQC;
@@ -512,6 +542,12 @@ int lockFile(const char* pathname) {
                     case ANS_FILE_NOT_EXISTS: {
                         ppf(CLR_ERROR); printSave("LF CLIENT> Il file '%s' non esiste (o è stato cancellato mentre eri in attesa), non puoi lockarlo.", pathname); ppff();
                         errno = ENOENT;
+                        break;
+                    }
+
+                    case ANS_ERROR: {
+                        ppf(CLR_ERROR); printSave("OF CLIENT> Il file '%s' non può essere lockato a causa di un problema interno del server.", pathname); ppff();
+                        errno = EREMOTEIO;
                         break;
                     }
 
@@ -566,6 +602,12 @@ int unlockFile(const char* pathname) {
                     case ANS_FILE_NOT_EXISTS: {
                         ppf(CLR_ERROR); printSave("UF CLIENT> Il file '%s' non esiste, non puoi lockarlo.", pathname); ppff();
                         errno = ENOENT;
+                        break;
+                    }
+
+                    case ANS_ERROR: {
+                        ppf(CLR_ERROR); printSave("OF CLIENT> Il file '%s' non può essere unlockato a causa di un problema interno del server.", pathname); ppff();
+                        errno = EREMOTEIO;
                         break;
                     }
 
@@ -624,6 +666,12 @@ int closeFile(const char* pathname) {
                         break;
                     }
 
+                    case ANS_ERROR: {
+                        ppf(CLR_ERROR); printSave("OF CLIENT> Il file '%s' non può essere chiuso a causa di un problema interno del server.", pathname); ppff();
+                        errno = EREMOTEIO;
+                        break;
+                    }
+
                     default: {
                         ppf(CLR_ERROR); printSave("CF CLIENT> Il server ha mandato una risposta non valida. ACTION: %d", msg->action); ppff();
                         errno = EBADRQC;
@@ -678,6 +726,12 @@ int removeFile(const char* pathname) {
                     case ANS_NO_PERMISSION: {
                         ppf(CLR_ERROR); printSave("RF CLIENT> Il file '%s' non può essere eliminato perché è lockato da un altro client.", pathname); ppff();
                         errno = EACCES;
+                        break;
+                    }
+
+                    case ANS_ERROR: {
+                        ppf(CLR_ERROR); printSave("OF CLIENT> Il file '%s' non può essere eliminato a causa di un problema interno del server.", pathname); ppff();
+                        errno = EREMOTEIO;
                         break;
                     }
 

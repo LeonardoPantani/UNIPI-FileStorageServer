@@ -52,7 +52,7 @@ void help(void) {
     ppf(CLR_INFO); printf("    -p                 \033[0m->\033[94m abilita le stampe sull'stdout di ogni operazione\n"); ppff();
 }
 
-int writeOnFile(char* filePath, struct stat properties) {
+static int writeOnFile(char* filePath, struct stat properties) {
     if(openFile(filePath, O_CREATE) == 0) { // se il file non esiste lo creo, ci scrivo e lo chiudo
         if(writeFile(filePath, ejectedFileFolder) == 0) { 
             if(closeFile(filePath) == 0) {
@@ -69,6 +69,8 @@ int writeOnFile(char* filePath, struct stat properties) {
         if(fread(data, 1, properties.st_size, filePointer) == properties.st_size) { // se la lettura ha successo
             if(appendToFile(filePath, data, properties.st_size, ejectedFileFolder) == 0) {
                 if(closeFile(filePath) == 0) {
+                    fclose(filePointer);
+                    free(data);
                     return 1;
                 }
             }
@@ -207,7 +209,7 @@ static int executeAction(ActionType ac, char* parameters) {
             while(filePath != NULL) {
                 if(readFile(filePath, &filePointer, &fileSize) == 0) {
                     if(saveFiles) { // effettuo operazioni sottostanti solo se i file vanno salvati
-                        FILE* filePointer;
+                        FILE* file;
                         char savedFilePath[PATH_MAX];
 
                         memset(savedFilePath, 0, PATH_MAX);
@@ -219,14 +221,14 @@ static int executeAction(ActionType ac, char* parameters) {
                         }
                         strcat(savedFilePath, basename(filePath));
 
-                        filePointer = fopen(savedFilePath, "wb");
-                        checkStop(filePointer == NULL, "file rilevato nella cartella non aperto");
+                        file = fopen(savedFilePath, "wb");
+                        checkStop(file == NULL, "file rilevato nella cartella non aperto");
 
-                        fwrite(filePointer, 1, fileSize, filePointer);
+                        fwrite(filePointer, 1, fileSize, file);
                         ppf(CLR_INFO); printSave("CLIENT> File '%s' salvato in '%s'", filePath, savedFilePath); ppff();
-
-                        free(filePointer);   
-                        fclose(filePointer);
+ 
+                        free(filePointer);
+                        fclose(file);
                     }
                 } else {
                     return -1; // appena un file non viene letto do operazione fallita
@@ -486,8 +488,7 @@ int main(int argc, char* argv[]) {
         if(esito == 0) {
             if(ac == ANS_WELCOME) {
                 ppf(CLR_SUCCESS); printSave("CLIENT> Ricevuto WELCOME dal server: %s", msg->data); ppff();
-                //free(msg->data);
-
+                free(msg->data);
                 char* testo_msg = "Grazie, ci sono";
                 setMessage(msg, ANS_HELLO, 0, NULL, testo_msg, strlen(testo_msg));
 

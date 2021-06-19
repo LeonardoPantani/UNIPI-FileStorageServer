@@ -51,7 +51,7 @@ void cleanHT(hashtable_t* hasht) {
     ht_destroy(hasht);
 }
 
-char* findOldFile(hashtable_t* hasht) { // FIXME dà segmentation fault!! da rifare a modo
+char* findOldFile(hashtable_t* hasht) {
 	hash_elem_it it = HT_ITERATOR(hasht);
 
 	char* currentKey = ht_iterate_keys(&it);
@@ -62,6 +62,7 @@ char* findOldFile(hashtable_t* hasht) { // FIXME dà segmentation fault!! da rif
 
     do {
         currentElem = (File *)ht_get(hasht, currentKey);
+        if(currentElem == NULL) break;
 
         if(oldElem == NULL) {
             oldElem = malloc(sizeof(File));
@@ -70,7 +71,7 @@ char* findOldFile(hashtable_t* hasht) { // FIXME dà segmentation fault!! da rif
 
         if(currentElem->updatedDate < oldElem->updatedDate) {
             *oldElem = *currentElem;
-            *oldKey = *currentKey;
+            strcpy(oldKey, currentKey);
         }
 
         currentKey = ht_iterate_keys(&it);
@@ -94,7 +95,7 @@ static int checkLimits(Message* msg, int which) {
 
 
 int expellFiles(Message* msg, int socketConnection, int numGestoreConnessione, int controllo) {
-    int i = 0;
+    int esito = 0;
     Message* risposta = cmalloc(sizeof(Message));
 
     setMessage(risposta, ANS_UNKNOWN, 0, NULL, NULL, 0);
@@ -106,9 +107,16 @@ int expellFiles(Message* msg, int socketConnection, int numGestoreConnessione, i
         setMessage(risposta, ANS_STREAM_START, 0, NULL, NULL, 0);
         checkStop(sendMessage(socketConnection, risposta) == -1, "errore invio messaggio inizio flush");
 
+        printFiles(ht);
+
         do {
             char* chiave = findOldFile(ht);
             File* oldFile = ht_get(ht, chiave);
+            if(oldFile == NULL) {
+                ppf(CLR_ERROR); printSave("GC %d > Errore durante l'ottenimento di un file da rimuovere.", numGestoreConnessione); ppff();
+                esito = -1;
+                break;
+            }
             
             // aggiornamento statistiche
             locka(mutexStatistiche);
@@ -124,7 +132,6 @@ int expellFiles(Message* msg, int socketConnection, int numGestoreConnessione, i
             
             if(oldFile->data_length > 0) free(oldFile->data);
             free(ht_remove(ht, oldFile->path));
-            i++;
         } while((esitoControllo = checkLimits(msg, controllo)) != 0);
 
         setMessage(risposta, ANS_STREAM_END, 0, NULL, NULL, 0);
@@ -133,7 +140,7 @@ int expellFiles(Message* msg, int socketConnection, int numGestoreConnessione, i
 
     free(risposta);
 
-    return i;
+    return esito;
 }
 
 
@@ -146,9 +153,13 @@ void printFiles(hashtable_t* hasht) {
 
     while(k != NULL) {
         File* el = (File *)ht_get(hasht, k);
+        if(el == NULL) {
+            ppf(CLR_ERROR); printSave("LE   > Errore durante la stampa degli elementi nella hash table."); ppff();
+            break;
+        }
         if(el->openBy == -1) opener = "nessuno"; else sprintf(opener, "%d", el->openBy);
         strftime(buffer, MAX_TIMESTAMP_SIZE, "%c", localtime(&el->updatedDate));
-        printSave("PERCORSO: %-45s | AUTORE: %d (aperto da: %s) | DATA AGGIORNAMENTO: %-10s | SPAZIO OCCUPATO: %ld bytes", k, el->author, opener, buffer, el->data_length);
+        printSave("PERCORSO: %-45s | AUTORE: %-3d (aperto da: %s) | DATA AGGIORNAMENTO: %-10s | SPAZIO OCCUPATO: %ld bytes", k, el->author, opener, buffer, el->data_length);
         fflush(stdout);
         k = ht_iterate_keys(&it);
     }
@@ -676,7 +687,9 @@ void *attesaSegnali(void* statFile) {
         }
 
         if(segnale == SIGUSR1) {
+            locka(mutexHT);
             printFiles(ht);
+            unlocka(mutexHT);
         }
 
         if(segnale == SIGUSR2) {
