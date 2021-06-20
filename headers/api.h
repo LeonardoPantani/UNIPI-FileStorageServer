@@ -22,6 +22,7 @@
 
 extern FILE* fileLog;
 extern pthread_mutex_t mutexFileLog;
+extern int verbose;
 
 /**
     @brief  Struttura che contiene l'associazione tra un nome socket e un file descriptor.

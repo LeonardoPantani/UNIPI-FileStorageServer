@@ -43,7 +43,7 @@ server: $(server_dependencies)
 	$(CC) $(INCLUDES) $(CFLAGS) $(THREAD_FLAGS) sources/server.c -o server $(CXXFLAGS) -Wl,-rpath,./build/libs -L ./build/libs -lds -lserver -lcomm
 
 client: $(client_dependencies)
-	$(CC) $(INCLUDES) $(CFLAGS) sources/client.c -o client $(CXXFLAGS) -Wl,-rpath,./build/libs -L ./build/libs -lcomm -lapi
+	$(CC) $(INCLUDES) $(CFLAGS) sources/client.c -o client $(CXXFLAGS) -Wl,-rpath,./build/libs -L ./build/libs -lapi -lcomm
 
 
 libs/libserver.so: $(OBJECT_FOLDER)/config.o $(OBJECT_FOLDER)/statistics.o

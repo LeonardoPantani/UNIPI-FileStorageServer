@@ -22,6 +22,8 @@
 
 #include "api.h"
 
+#define HELLO_MESSAGE "Grazie, ci sono."
+
 FILE* fileLog; // puntatore al file di log del client
 pthread_mutex_t mutexFileLog = PTHREAD_MUTEX_INITIALIZER;
 
@@ -47,8 +49,8 @@ static int checkProgramParameters(ActionType actionList[], int totalActions, cha
     int ok = 0;
     int required_R = 0, required_W = 0;
 
-    if(strcmp(eff, "#") != 0) required_R = 1;
-    if(strcmp(sff, "#") != 0) required_W = 1;
+    if(strcmp(sff, "#") != 0) required_R = 1;
+    if(strcmp(eff, "#") != 0) required_W = 1;
 
     for(int i = 0; i < totalActions && (required_R == 1 || required_W == 1); i++) {
         if(required_R == 1 && (actionList[i] == AC_READ_LIST || actionList[i] == AC_READ_RECU))
@@ -197,7 +199,7 @@ static int executeAction(ActionType ac, char* parameters) {
                 free(folder);
                 return -1;
             } else {
-                ppf(CLR_HIGHLIGHT); printf("CLIENT> Cartella per la write impostata su '%s'", folderPath); fflush(stdout);
+                ppf(CLR_HIGHLIGHT); printSave("CLIENT> Cartella per la write impostata su '%s' (numFiles: %d)", folderPath, numFiles); fflush(stdout);
                 free(folder);
             }
             char* temp = strtok_r(NULL, ",", &savePointer);
@@ -209,17 +211,12 @@ static int executeAction(ActionType ac, char* parameters) {
                     
                     if(numFiles == 0) {
                         numFiles = -1;
-                        printf(" | numero file: TUTTI\n"); ppff();
-                    } else {
-                        printf(" | numero file: %d\n", numFiles); ppff();
                     }
                     fflush(stdout);
                 } else {
                     ppf(CLR_ERROR); printSave("CLIENT> Specificato sottoargomento 'n' ma non il suo valore."); ppff();
                     return -1;
                 }
-            } else {
-                printf(" | numero file: TUTTI\n"); ppff(); fflush(stdout);
             }
 
             return sendFilesList(folderPath, numFiles, 0, 0); // restituisce la differenza tra file totali e file inviati con successo (se 0 ok, !=0 non tutti inviati)
@@ -571,7 +568,7 @@ int main(int argc, char* argv[]) {
             ppf(CLR_SUCCESS); printSave("CLIENT> Ricevuto WELCOME dal server: %s", msg->data); ppff();
             free(msg->data);
 
-            char* testo_msg = "Grazie, ci sono";
+            char* testo_msg = HELLO_MESSAGE;
             setMessage(msg, ANS_HELLO, 0, NULL, testo_msg, strlen(testo_msg));
 
             ppf(CLR_INFO); printSave("CLIENT> Rispondo al WELCOME con: %s", testo_msg);

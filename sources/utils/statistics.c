@@ -9,6 +9,8 @@
 int printStats(const char* pathname, int workers) {
     extern Statistics stats;
     extern Config config;
+    extern FILE* fileLog;
+    extern pthread_mutex_t mutexFileLog;
 
     FILE* filePointer;
 
@@ -31,7 +33,7 @@ int printStats(const char* pathname, int workers) {
 
     ppf(CLR_HIGHLIGHT);
     // stampa su schermo
-    printf("----- STATISTICHE SERVER [Calcolate in data: %s] -----\nMedia bytes letti: %g\nMedia bytes scritti: %g\nLetture totali: %d\nScritture totali: %d\nLock totali: %d\nAperture totali: %d\nAperture&Create totali: %d\nUnlock totali: %d\nCancellazioni totali: %d\nChiusure totali: %d\n\nDimensione max file totale raggiunta: %f megabytes/%d megabytes\nNumero massimo di file raggiunto: %d/%d\nNumero di applicazioni dell'algoritmo di rimpiazzamento: %d\nNumero di connessioni concorrenti totali: %d\nNumero di connessioni bloccate: %d\n\nLISTA THREAD:\n", buffer, avg_bytes_read, avg_bytes_written, stats.n_read, stats.n_write, stats.n_lock, stats.n_open, stats.n_opencreate, stats.n_unlock, stats.n_delete, stats.n_close, (stats.max_size_reached/(double)1000000), config.max_memory_size, stats.max_file_number_reached, config.max_files, stats.n_replace_applied, stats.max_concurrent_connections, stats.blocked_connections);
+    printSave("----- STATISTICHE SERVER [Calcolate in data: %s] -----\nMedia bytes letti: %g\nMedia bytes scritti: %g\nLetture totali: %d\nScritture totali: %d\nLock totali: %d\nAperture totali: %d\nAperture&Create totali: %d\nUnlock totali: %d\nCancellazioni totali: %d\nChiusure totali: %d\n\nDimensione max file totale raggiunta: %f megabytes/%d megabytes\nNumero massimo di file raggiunto: %d/%d\nNumero di applicazioni dell'algoritmo di rimpiazzamento: %d\nNumero di connessioni concorrenti totali: %d\nNumero di connessioni bloccate: %d\n\nLISTA THREAD:", buffer, avg_bytes_read, avg_bytes_written, stats.n_read, stats.n_write, stats.n_lock, stats.n_open, stats.n_opencreate, stats.n_unlock, stats.n_delete, stats.n_close, (stats.max_size_reached/(double)1000000), config.max_memory_size, stats.max_file_number_reached, config.max_files, stats.n_replace_applied, stats.max_concurrent_connections, stats.blocked_connections);
     // salvataggio nel buffer
     sprintf(out, "%lu %g %g %d %d %d %d %d %d %d %d %d %d %d %d %d\n", (unsigned long)time(NULL), avg_bytes_read, avg_bytes_written, stats.n_read, stats.n_write, stats.n_lock, stats.n_open, stats.n_opencreate, stats.n_unlock, stats.n_delete, stats.n_close, stats.max_size_reached, stats.max_file_number_reached, stats.n_replace_applied, stats.max_concurrent_connections, stats.blocked_connections);
 
@@ -40,8 +42,8 @@ int printStats(const char* pathname, int workers) {
     
     // stampa a schermo e scrittura su file delle richieste servite da ogni worker
     for(int i = 0; i < workers; i++) {
-        sprintf(out, "> Richieste servite dal thread %d: %d\n", i, stats.workerRequests[i]);
-        printf("%s", out);
+        sprintf(out, "> Richieste servite dal thread %d: %d", i, stats.workerRequests[i]);
+        printSave("%s", out);
 
         sprintf(out, "%d:%d ", i, stats.workerRequests[i]);
         fputs(out, filePointer);

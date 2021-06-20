@@ -36,12 +36,16 @@ int loadConfig(Config* conf, char* posConfig) {
                         #endif
                         if(strcmpnl(variabile, "!SERVER_KEY") == 0) {
                             if(strcmpnl(valore, KEY) != 0) { // se la chiave non corrisponde allora stop
+                                free(riga);
+                                fclose(fp);
                                 return ERR_INVALIDKEY;
                             }
                             v++;
                         } else if(strcmpnl(variabile, "MAX_WORKERS") == 0) {
                             temp = atoi(valore);
                             if(temp <= 0) {
+                                free(riga);
+                                fclose(fp);
                                 return ERR_NEGVALUE;
                             }
                             (*conf).max_workers = atoi(valore);
@@ -49,6 +53,8 @@ int loadConfig(Config* conf, char* posConfig) {
                         } else if(strcmpnl(variabile, "MAX_CONNECTIONS") == 0) {
                             temp = atoi(valore);
                             if(temp <= 0) {
+                                free(riga);
+                                fclose(fp);
                                 return ERR_NEGVALUE;
                             }
                             (*conf).max_connections = atoi(valore);
@@ -56,6 +62,8 @@ int loadConfig(Config* conf, char* posConfig) {
                         } else if(strcmpnl(variabile, "MAX_MEMORY_SIZE") == 0) {
                             temp = atoi(valore);
                             if(temp <= 0) {
+                                free(riga);
+                                fclose(fp);
                                 return ERR_NEGVALUE;
                             }
                             (*conf).max_memory_size = atoi(valore);
@@ -63,6 +71,8 @@ int loadConfig(Config* conf, char* posConfig) {
                         } else if(strcmpnl(variabile, "MAX_FILES") == 0) {
                             temp = atoi(valore);
                             if(temp <= 0) {
+                                free(riga);
+                                fclose(fp);
                                 return ERR_NEGVALUE;
                             }
                             (*conf).max_files = atoi(valore);
@@ -78,10 +88,14 @@ int loadConfig(Config* conf, char* posConfig) {
                             v++;
                         }
                     } else {
+                        free(riga);
+                        fclose(fp);
                         return ERR_EMPTYVALUE; // il valore dopo il carattere "=" è vuoto
                     }
                 }
             } else {
+                free(riga);
+                fclose(fp);
                 return ERR_ILLEGAL; // carattere o variabile illegale ("=123" è illegale)
             }
         }

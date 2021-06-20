@@ -44,7 +44,7 @@ int searchAssocByName(char* socketname) {
 
 int saveToFolder(Message* msg, const char* destinationFolder, char* logPrefix, char* customText) {
     if(strcmp(destinationFolder, "#") == 0) {
-        ppf(CLR_WARNING); printSave("%s CLIENT> Il file remoto '%s' (%d bytes) non verrà salvato perché non è stata specificata nessuna cartella %s.", logPrefix, msg->path, msg->data_length, customText); ppff();
+        ppf(CLR_WARNING); printSaveP("%s CLIENT> Il file remoto '%s' (%d bytes) non verrà salvato perché non è stata specificata nessuna cartella %s.", logPrefix, msg->path, msg->data_length, customText); ppff();
     } else {
         FILE* filePointer;
         char percorso[PATH_MAX];
@@ -59,12 +59,12 @@ int saveToFolder(Message* msg, const char* destinationFolder, char* logPrefix, c
 
         filePointer = fopen(percorso, "wb");
         if(filePointer == NULL) { 
-            ppf(CLR_ERROR); printSave("%s CLIENT> Impossibile salvare file remoto nel percorso specificato: '%s'.", logPrefix, percorso);
+            ppf(CLR_ERROR); printSaveP("%s CLIENT> Impossibile salvare file remoto nel percorso specificato: '%s'.", logPrefix, percorso);
             return -1;
         }
 
         fwrite(msg->data, 1, msg->data_length, filePointer);
-        ppf(CLR_INFO); printSave("%s CLIENT> File remoto '%s' (%d bytes) salvato in '%s'", logPrefix, msg->path, msg->data_length, percorso); ppff();
+        ppf(CLR_INFO); printSaveP("%s CLIENT> File remoto '%s' (%d bytes) salvato in '%s'", logPrefix, msg->path, msg->data_length, percorso); ppff();
         
         fclose(filePointer);
         free(msg->data);
@@ -141,21 +141,21 @@ int openFile(const char* pathname, int flags) {
             if(readMessage(socketConnection, msg) == 0) {
                 switch(msg->action) {
                     case ANS_OK: {
-                        printSave("OF CLIENT> File '%s' aperto!", pathname);
+                        printSaveP("OF CLIENT> File '%s' aperto!", pathname);
                         break;
                     }
 
                     case ANS_STREAM_START: {
                         while(readMessage(socketConnection, msg) == 0 && msg->action == ANS_STREAM_FILE) {
-                            ppf(CLR_HIGHLIGHT); printSave("OF CLIENT> Espulso file remoto '%s' (%d bytes) per fare spazio a %s", msg->path, msg->data_length, pathname); ppff();
+                            ppf(CLR_HIGHLIGHT); printSaveP("OF CLIENT> Espulso file remoto '%s' (%d bytes) per fare spazio a %s", msg->path, msg->data_length, pathname); ppff();
                             saveToFolder(msg, ejectedFileFolder, "OF", "con -D");
                         }
                         
                         if(readMessage(socketConnection, msg) == 0) {
                             if(msg->action == ANS_OK) {
-                                printSave("OF CLIENT> File '%s' aperto!", pathname);
+                                printSaveP("OF CLIENT> File '%s' aperto!", pathname);
                             } else {
-                                ppf(CLR_ERROR); printSave("OF CLIENT> Il server ha mandato una risposta non valida (2). ACTION: %d", msg->action); ppff();
+                                ppf(CLR_ERROR); printSaveP("OF CLIENT> Il server ha mandato una risposta non valida (2). ACTION: %d", msg->action); ppff();
                                 errno = EBADRQC;
                             }
                         }
@@ -164,40 +164,40 @@ int openFile(const char* pathname, int flags) {
                     }
 
                     case ANS_NO_PERMISSION: {
-                        ppf(CLR_ERROR); printSave("OF CLIENT> Il file '%s' non può essere letto perché è lockato da un altro client.", pathname); ppff();
+                        ppf(CLR_ERROR); printSaveP("OF CLIENT> Il file '%s' non può essere letto perché è lockato da un altro client.", pathname); ppff();
                         errno = EACCES;
                         break;
                     }
 
                     case ANS_FILE_EXISTS: {
-                        ppf(CLR_ERROR); printSave("OF CLIENT> Il file '%s' esiste già, non puoi fare una CREATE.", pathname); ppff();
+                        ppf(CLR_ERROR); printSaveP("OF CLIENT> Il file '%s' esiste già, non puoi fare una CREATE.", pathname); ppff();
                         errno = EEXIST;
                         break;
                     }
 
                     case ANS_FILE_NOT_EXISTS: {
-                        ppf(CLR_ERROR); printSave("OF CLIENT> Il file '%s' non esiste, devi fare prima una CREATE.", pathname); ppff();
+                        ppf(CLR_ERROR); printSaveP("OF CLIENT> Il file '%s' non esiste, devi fare prima una CREATE.", pathname); ppff();
                         errno = ENOENT;
                         break;
                     }
 
                     case ANS_ERROR: {
-                        ppf(CLR_ERROR); printSave("OF CLIENT> Il file '%s' non può essere caricato a causa di un problema interno del server.", pathname); ppff();
+                        ppf(CLR_ERROR); printSaveP("OF CLIENT> Il file '%s' non può essere caricato a causa di un problema interno del server.", pathname); ppff();
                         errno = EREMOTEIO;
                         break;
                     }
                     
                     default: {
-                        ppf(CLR_ERROR); printSave("OF CLIENT> Il server ha mandato una risposta non valida. ACTION: %d", msg->action); ppff();
+                        ppf(CLR_ERROR); printSaveP("OF CLIENT> Il server ha mandato una risposta non valida. ACTION: %d", msg->action); ppff();
                         errno = EBADRQC;
                     }
                 }
             } else { // il server non ha risposto al client
-                printSave("OF CLIENT> Il server non ha risposto alla richiesta. ACTION: %d", msg->action);
+                printSaveP("OF CLIENT> Il server non ha risposto alla richiesta. ACTION: %d", msg->action);
                 errno = EBADMSG;
             }
         } else { // impossibile inviare la richiesta
-            printSave("OF CLIENT> Non è stato possibile inviare la richiesta. ACTION: %d", msg->action);
+            printSaveP("OF CLIENT> Non è stato possibile inviare la richiesta. ACTION: %d", msg->action);
             errno = EBADE;
         }
 
@@ -227,33 +227,33 @@ int readFile(const char* pathname, void** buf, size_t* size) {
                     case ANS_OK: {
                         *buf = msg->data;
                         *size = msg->data_length;
-                        ppf(CLR_INFO); printSave("RF CLIENT> File '%s' salvato in memoria.", pathname); ppff();
+                        ppf(CLR_INFO); printSaveP("RF CLIENT> File '%s' salvato in memoria.", pathname); ppff();
                         break;
                     }
 
                     case ANS_FILE_NOT_EXISTS: {
-                        ppf(CLR_ERROR); printSave("RF CLIENT> Il file '%s' non esiste, non può essere letto.", pathname); ppff();
+                        ppf(CLR_ERROR); printSaveP("RF CLIENT> Il file '%s' non esiste, non può essere letto.", pathname); ppff();
                         errno = ENOENT;
                         break;
                     }
 
                     case ANS_ERROR: {
-                        ppf(CLR_ERROR); printSave("OF CLIENT> Il file '%s' non può essere letto a causa di un problema interno del server.", pathname); ppff();
+                        ppf(CLR_ERROR); printSaveP("OF CLIENT> Il file '%s' non può essere letto a causa di un problema interno del server.", pathname); ppff();
                         errno = EREMOTEIO;
                         break;
                     }
 
                     default: {
-                        ppf(CLR_ERROR); printSave("RF CLIENT> Il server ha mandato una risposta non valida. ACTION: %d", msg->action); ppff();
+                        ppf(CLR_ERROR); printSaveP("RF CLIENT> Il server ha mandato una risposta non valida. ACTION: %d", msg->action); ppff();
                         errno = EBADRQC;
                     }
                 }
             } else { // il server non ha risposto al client
-                printSave("RF CLIENT> Il server non ha risposto alla richiesta. ACTION: %d", msg->action);
+                printSaveP("RF CLIENT> Il server non ha risposto alla richiesta. ACTION: %d", msg->action);
                 errno = EBADMSG;
             }
         } else { // impossibile inviare la richiesta
-            printSave("RF CLIENT> Non è stato possibile inviare la richiesta. ACTION: %d", msg->action);
+            printSaveP("RF CLIENT> Non è stato possibile inviare la richiesta. ACTION: %d", msg->action);
             errno = EBADE;
         }
 
@@ -285,15 +285,15 @@ int readNFiles(int N, const char* dirname) {
                     case ANS_STREAM_START: {
                         int i = 0;
                         while(readMessage(socketConnection, msg) == 0 && msg->action == ANS_STREAM_FILE) {
-                            ppf(CLR_HIGHLIGHT); printSave("RN CLIENT> File remoto '%s' ricevuto dal server.", msg->path); ppff();
+                            ppf(CLR_HIGHLIGHT); printSaveP("RN CLIENT> File remoto '%s' ricevuto dal server.", msg->path); ppff();
                             if(saveToFolder(msg, savedFileFolder, "RN", "con -d") == 0) i++;
                         }
 
                         if(readMessage(socketConnection, msg) == 0) {
                             if(msg->action == ANS_OK) {
-                                printSave("RN CLIENT> Lettura %d files completata!", i);
+                                printSaveP("RN CLIENT> Lettura %d files completata!", i);
                             } else {
-                                ppf(CLR_ERROR); printSave("RN CLIENT> Il server ha mandato una risposta non valida (2). ACTION: %d", msg->action); ppff();
+                                ppf(CLR_ERROR); printSaveP("RN CLIENT> Il server ha mandato una risposta non valida (2). ACTION: %d", msg->action); ppff();
                                 errno = EBADRQC;
                             }
                         }
@@ -301,28 +301,28 @@ int readNFiles(int N, const char* dirname) {
                     }
 
                     case ANS_FILE_NOT_EXISTS: { // non ci sono file da mandare
-                        ppf(CLR_ERROR); printSave("RN CLIENT> Il server non possiede file da inviarti."); ppff();
+                        ppf(CLR_ERROR); printSaveP("RN CLIENT> Il server non possiede file da inviarti."); ppff();
                         errno = ENOENT;
                         break;
                     }
 
                     case ANS_ERROR: {
-                        ppf(CLR_ERROR); printSave("OF CLIENT> Il server ha avuto un problema interno."); ppff();
+                        ppf(CLR_ERROR); printSaveP("OF CLIENT> Il server ha avuto un problema interno."); ppff();
                         errno = EREMOTEIO;
                         break;
                     }
 
                     default: {
-                        ppf(CLR_ERROR); printSave("RN CLIENT> Il server ha mandato una risposta non valida. ACTION: %d", msg->action); ppff();
+                        ppf(CLR_ERROR); printSaveP("RN CLIENT> Il server ha mandato una risposta non valida. ACTION: %d", msg->action); ppff();
                         errno = EBADRQC;
                     }
                 }
             } else { // il server non ha risposto al client
-                printSave("RN CLIENT> Il server non ha risposto alla richiesta. ACTION: %d", msg->action);
+                printSaveP("RN CLIENT> Il server non ha risposto alla richiesta. ACTION: %d", msg->action);
                 errno = EBADMSG;
             }
         } else { // impossibile inviare la richiesta
-            printSave("RN CLIENT> Non è stato possibile inviare la richiesta. ACTION: %d", msg->action);
+            printSaveP("RN CLIENT> Non è stato possibile inviare la richiesta. ACTION: %d", msg->action);
             errno = EBADE;
         }
 
@@ -375,21 +375,21 @@ int writeFile(const char* pathname, const char* dirname) {
             if(readMessage(socketConnection, msg) == 0) {
                 switch(msg->action) {
                     case ANS_OK: {
-                        printSave("WF CLIENT> File '%s' (%ld bytes) caricato!", pathname, sb.st_size);
+                        printSaveP("WF CLIENT> File '%s' (%ld bytes) caricato!", pathname, sb.st_size);
                         break;
                     }
                     
                     case ANS_STREAM_START: {
                         while(readMessage(socketConnection, msg) == 0 && msg->action == ANS_STREAM_FILE) {
-                            ppf(CLR_HIGHLIGHT); printSave("WF CLIENT> Espulso file remoto '%s' (%d bytes) per fare spazio a %s (%ld bytes)", msg->path, msg->data_length, pathname, sb.st_size); ppff();
+                            ppf(CLR_HIGHLIGHT); printSaveP("WF CLIENT> Espulso file remoto '%s' (%d bytes) per fare spazio a %s (%ld bytes)", msg->path, msg->data_length, pathname, sb.st_size); ppff();
                             saveToFolder(msg, dirname, "WF", "(dirname = NULL)");
                         }
                         
                         if(readMessage(socketConnection, msg) == 0) {
                             if(msg->action == ANS_OK) {
-                                printSave("WF CLIENT> File '%s' (%ld bytes) caricato!", pathname, sb.st_size);
+                                printSaveP("WF CLIENT> File '%s' (%ld bytes) caricato!", pathname, sb.st_size);
                             } else {
-                                ppf(CLR_ERROR); printSave("WF CLIENT> Il server ha mandato una risposta non valida (2). ACTION: %d", msg->action); ppff();
+                                ppf(CLR_ERROR); printSaveP("WF CLIENT> Il server ha mandato una risposta non valida (2). ACTION: %d", msg->action); ppff();
                                 errno = EBADRQC;
                             }
                         }
@@ -397,40 +397,40 @@ int writeFile(const char* pathname, const char* dirname) {
                     }
 
                     case ANS_NO_PERMISSION: {
-                        ppf(CLR_ERROR); printSave("WF CLIENT> Il file '%s' non può essere letto perché è lockato da un altro client.", pathname); ppff();
+                        ppf(CLR_ERROR); printSaveP("WF CLIENT> Il file '%s' non può essere letto perché è lockato da un altro client.", pathname); ppff();
                         errno = EACCES;
                         break;
                     }
 
                     case ANS_BAD_RQST: {
-                        ppf(CLR_ERROR); printSave("WF CLIENT> Il file '%s' (%ld bytes) non è stato creato e lockato di recente. Impossibile scriverci.", pathname, sb.st_size); ppff();
+                        ppf(CLR_ERROR); printSaveP("WF CLIENT> Il file '%s' (%ld bytes) non è stato creato e lockato di recente. Impossibile scriverci.", pathname, sb.st_size); ppff();
                         errno = EINVAL;
                         break;
                     }
 
                     case ANS_FILE_NOT_EXISTS: {
-                        ppf(CLR_ERROR); printSave("WF CLIENT> Il file '%s' (%ld bytes) non esiste, devi fare prima una CREATE.", pathname, sb.st_size); ppff();
+                        ppf(CLR_ERROR); printSaveP("WF CLIENT> Il file '%s' (%ld bytes) non esiste, devi fare prima una CREATE.", pathname, sb.st_size); ppff();
                         errno = ENOENT;
                         break;
                     }
 
                     case ANS_ERROR: {
-                        ppf(CLR_ERROR); printSave("OF CLIENT> Il file '%s' non può essere scritto a causa di un problema interno del server.", pathname); ppff();
+                        ppf(CLR_ERROR); printSaveP("OF CLIENT> Il file '%s' non può essere scritto a causa di un problema interno del server.", pathname); ppff();
                         errno = EREMOTEIO;
                         break;
                     }
 
                     default: {
-                        ppf(CLR_ERROR); printSave("WF CLIENT> Il server ha mandato una risposta non valida. ACTION: %d", msg->action); ppff();
+                        ppf(CLR_ERROR); printSaveP("WF CLIENT> Il server ha mandato una risposta non valida. ACTION: %d", msg->action); ppff();
                         errno = EBADRQC;
                     }
                 }
             } else { // il server non ha risposto al client
-                printSave("WF CLIENT> Il server non ha risposto alla richiesta. ACTION: %d", msg->action);
+                printSaveP("WF CLIENT> Il server non ha risposto alla richiesta. ACTION: %d", msg->action);
                 errno = EBADMSG;
             }
         } else { // impossibile inviare la richiesta
-            printSave("WF CLIENT> Non è stato possibile inviare la richiesta. ACTION: %d", msg->action);
+            printSaveP("WF CLIENT> Non è stato possibile inviare la richiesta. ACTION: %d", msg->action);
             errno = EBADE;
         }
 
@@ -458,21 +458,21 @@ int appendToFile(const char* pathname, void* buf, size_t size, const char* dirna
             if(readMessage(socketConnection, msg) == 0) {
                 switch(msg->action) {
                     case ANS_OK: {
-                        printSave("AF CLIENT> Buffer da appendere (%zu bytes) caricato!", size);
+                        printSaveP("AF CLIENT> Buffer da appendere (%zu bytes) caricato!", size);
                         break;
                     }
                     
                     case ANS_STREAM_START: {
                         while(readMessage(socketConnection, msg) == 0 && msg->action != ANS_STREAM_END) {
-                            ppf(CLR_HIGHLIGHT); printSave("AF CLIENT> Espulso file remoto '%s' (%d bytes) per fare spazio al buffer da appendere (%zu bytes)", msg->path, msg->data_length, size); ppff();
+                            ppf(CLR_HIGHLIGHT); printSaveP("AF CLIENT> Espulso file remoto '%s' (%d bytes) per fare spazio al buffer da appendere (%zu bytes)", msg->path, msg->data_length, size); ppff();
                             saveToFolder(msg, dirname, "AF", "(dirname = NULL)");
                         }
                         
                         if(readMessage(socketConnection, msg) == 0) {
                             if(msg->action == ANS_OK) {
-                                printSave("AF CLIENT> Buffer da appendere (%zu bytes) caricato!", size);
+                                printSaveP("AF CLIENT> Buffer da appendere (%zu bytes) caricato!", size);
                             } else {
-                                ppf(CLR_ERROR); printSave("AF CLIENT> Il server ha mandato una risposta non valida (2). ACTION: %d", msg->action); ppff();
+                                ppf(CLR_ERROR); printSaveP("AF CLIENT> Il server ha mandato una risposta non valida (2). ACTION: %d", msg->action); ppff();
                                 errno = EBADRQC;
                             }
                         }
@@ -480,34 +480,34 @@ int appendToFile(const char* pathname, void* buf, size_t size, const char* dirna
                     }
 
                     case ANS_NO_PERMISSION: {
-                        ppf(CLR_ERROR); printSave("AF CLIENT> Il file '%s' non può essere unlockato perché non ne possiedi i diritti.", pathname); ppff();
+                        ppf(CLR_ERROR); printSaveP("AF CLIENT> Il file '%s' non può essere unlockato perché non ne possiedi i diritti.", pathname); ppff();
                         errno = ENOENT;
                         break;
                     }
 
                     case ANS_FILE_NOT_EXISTS: {
-                        ppf(CLR_ERROR); printSave("AF CLIENT> Il file '%s' (%zu bytes) non esiste, devi fare prima una CREATE.", pathname, size); ppff();
+                        ppf(CLR_ERROR); printSaveP("AF CLIENT> Il file '%s' (%zu bytes) non esiste, devi fare prima una CREATE.", pathname, size); ppff();
                         errno = ENOENT;
                         break;
                     }
 
                     case ANS_ERROR: {
-                        ppf(CLR_ERROR); printSave("OF CLIENT> Il file '%s' non può essere scritto a causa di un problema interno del server.", pathname); ppff();
+                        ppf(CLR_ERROR); printSaveP("OF CLIENT> Il file '%s' non può essere scritto a causa di un problema interno del server.", pathname); ppff();
                         errno = EREMOTEIO;
                         break;
                     }
 
                     default: {
-                        ppf(CLR_ERROR); printSave("AF CLIENT> Il server ha mandato una risposta non valida. ACTION: %d", msg->action); ppff();
+                        ppf(CLR_ERROR); printSaveP("AF CLIENT> Il server ha mandato una risposta non valida. ACTION: %d", msg->action); ppff();
                         errno = EBADRQC;
                     }
                 }
             } else { // il server non ha risposto al client
-                printSave("AF CLIENT> Il server non ha risposto alla richiesta. ACTION: %d", msg->action);
+                printSaveP("AF CLIENT> Il server non ha risposto alla richiesta. ACTION: %d", msg->action);
                 errno = EBADMSG;
             }
         } else { // impossibile inviare la richiesta
-            printSave("AF CLIENT> Non è stato possibile inviare la richiesta. ACTION: %d", msg->action);
+            printSaveP("AF CLIENT> Non è stato possibile inviare la richiesta. ACTION: %d", msg->action);
             errno = EBADE;
         }
 
@@ -535,33 +535,33 @@ int lockFile(const char* pathname) {
             if(readMessage(socketConnection, msg) == 0) {
                 switch(msg->action) {
                     case ANS_OK: {
-                        ppf(CLR_IMPORTANT); printSave("LF CLIENT> File '%s' lockato! (REQ_LOCK)", pathname); ppff();
+                        ppf(CLR_IMPORTANT); printSaveP("LF CLIENT> File '%s' lockato! (REQ_LOCK)", pathname); ppff();
                         break;
                     }
 
                     case ANS_FILE_NOT_EXISTS: {
-                        ppf(CLR_ERROR); printSave("LF CLIENT> Il file '%s' non esiste (o è stato cancellato mentre eri in attesa), non puoi lockarlo.", pathname); ppff();
+                        ppf(CLR_ERROR); printSaveP("LF CLIENT> Il file '%s' non esiste (o è stato cancellato mentre eri in attesa), non puoi lockarlo.", pathname); ppff();
                         errno = ENOENT;
                         break;
                     }
 
                     case ANS_ERROR: {
-                        ppf(CLR_ERROR); printSave("OF CLIENT> Il file '%s' non può essere lockato a causa di un problema interno del server.", pathname); ppff();
+                        ppf(CLR_ERROR); printSaveP("OF CLIENT> Il file '%s' non può essere lockato a causa di un problema interno del server.", pathname); ppff();
                         errno = EREMOTEIO;
                         break;
                     }
 
                     default: {
-                        ppf(CLR_ERROR); printSave("LF CLIENT> Il server ha mandato una risposta non valida. ACTION: %d", msg->action); ppff();
+                        ppf(CLR_ERROR); printSaveP("LF CLIENT> Il server ha mandato una risposta non valida. ACTION: %d", msg->action); ppff();
                         errno = EBADRQC;
                     }
                 }
             } else { // il server non ha risposto al client
-                printSave("LF CLIENT> Il server non ha risposto alla richiesta. ACTION: %d", msg->action);
+                printSaveP("LF CLIENT> Il server non ha risposto alla richiesta. ACTION: %d", msg->action);
                 errno = EBADMSG;
             }
         } else { // impossibile inviare la richiesta
-            printSave("LF CLIENT> Non è stato possibile inviare la richiesta. ACTION: %d", msg->action);
+            printSaveP("LF CLIENT> Non è stato possibile inviare la richiesta. ACTION: %d", msg->action);
             errno = EBADE;
         }
 
@@ -589,39 +589,39 @@ int unlockFile(const char* pathname) {
             if(readMessage(socketConnection, msg) == 0) {
                 switch(msg->action) {
                     case ANS_OK: {
-                        ppf(CLR_IMPORTANT); printSave("UF CLIENT> File '%s' unlockato! (REQ_UNLOCK)", pathname); ppff();
+                        ppf(CLR_IMPORTANT); printSaveP("UF CLIENT> File '%s' unlockato! (REQ_UNLOCK)", pathname); ppff();
                         break;
                     }
 
                     case ANS_NO_PERMISSION: {
-                        ppf(CLR_ERROR); printSave("UF CLIENT> Il file '%s' non può essere unlockato perché non ne possiedi i diritti.", pathname); ppff();
+                        ppf(CLR_ERROR); printSaveP("UF CLIENT> Il file '%s' non può essere unlockato perché non ne possiedi i diritti.", pathname); ppff();
                         errno = ENOENT;
                         break;
                     }
 
                     case ANS_FILE_NOT_EXISTS: {
-                        ppf(CLR_ERROR); printSave("UF CLIENT> Il file '%s' non esiste, non puoi lockarlo.", pathname); ppff();
+                        ppf(CLR_ERROR); printSaveP("UF CLIENT> Il file '%s' non esiste, non puoi lockarlo.", pathname); ppff();
                         errno = ENOENT;
                         break;
                     }
 
                     case ANS_ERROR: {
-                        ppf(CLR_ERROR); printSave("OF CLIENT> Il file '%s' non può essere unlockato a causa di un problema interno del server.", pathname); ppff();
+                        ppf(CLR_ERROR); printSaveP("OF CLIENT> Il file '%s' non può essere unlockato a causa di un problema interno del server.", pathname); ppff();
                         errno = EREMOTEIO;
                         break;
                     }
 
                     default: {
-                        ppf(CLR_ERROR); printSave("UF CLIENT> Il server ha mandato una risposta non valida. ACTION: %d", msg->action); ppff();
+                        ppf(CLR_ERROR); printSaveP("UF CLIENT> Il server ha mandato una risposta non valida. ACTION: %d", msg->action); ppff();
                         errno = EBADRQC;
                     }
                 }
             } else { // il server non ha risposto al client
-                printSave("UF CLIENT> Il server non ha risposto alla richiesta. ACTION: %d", msg->action);
+                printSaveP("UF CLIENT> Il server non ha risposto alla richiesta. ACTION: %d", msg->action);
                 errno = EBADMSG;
             }
         } else { // impossibile inviare la richiesta
-            printSave("UF CLIENT> Non è stato possibile inviare la richiesta. ACTION: %d", msg->action);
+            printSaveP("UF CLIENT> Non è stato possibile inviare la richiesta. ACTION: %d", msg->action);
             errno = EBADE;
         }
 
@@ -650,39 +650,39 @@ int closeFile(const char* pathname) {
             if(esito == 0) {
                 switch(msg->action) {
                     case ANS_OK: {
-                        ppf(CLR_HIGHLIGHT); printSave("CF CLIENT> File '%s' chiuso con successo.", pathname); ppff();
+                        ppf(CLR_HIGHLIGHT); printSaveP("CF CLIENT> File '%s' chiuso con successo.", pathname); ppff();
                         break;
                     }
 
                     case ANS_FILE_NOT_EXISTS: {
-                        ppf(CLR_ERROR); printSave("CF CLIENT> Il file '%s' non esiste, non puoi chiuderlo.", pathname); ppff();
+                        ppf(CLR_ERROR); printSaveP("CF CLIENT> Il file '%s' non esiste, non puoi chiuderlo.", pathname); ppff();
                         errno = ENOENT;
                         break;
                     }
 
                     case ANS_NO_PERMISSION: {
-                        ppf(CLR_ERROR); printSave("CF CLIENT> Il file '%s' non può essere chiuso perché è lockato da un altro client.", pathname); ppff();
+                        ppf(CLR_ERROR); printSaveP("CF CLIENT> Il file '%s' non può essere chiuso perché è lockato da un altro client.", pathname); ppff();
                         errno = EACCES;
                         break;
                     }
 
                     case ANS_ERROR: {
-                        ppf(CLR_ERROR); printSave("OF CLIENT> Il file '%s' non può essere chiuso a causa di un problema interno del server.", pathname); ppff();
+                        ppf(CLR_ERROR); printSaveP("OF CLIENT> Il file '%s' non può essere chiuso a causa di un problema interno del server.", pathname); ppff();
                         errno = EREMOTEIO;
                         break;
                     }
 
                     default: {
-                        ppf(CLR_ERROR); printSave("CF CLIENT> Il server ha mandato una risposta non valida. ACTION: %d", msg->action); ppff();
+                        ppf(CLR_ERROR); printSaveP("CF CLIENT> Il server ha mandato una risposta non valida. ACTION: %d", msg->action); ppff();
                         errno = EBADRQC;
                     }
                 }
             } else { // il server non ha risposto al client
-                printSave("CF CLIENT> Il server non ha risposto alla richiesta. ACTION: %d", msg->action);
+                printSaveP("CF CLIENT> Il server non ha risposto alla richiesta. ACTION: %d", msg->action);
                 errno = EBADMSG;
             }
         } else { // impossibile inviare la richiesta
-            printSave("CF CLIENT> Non è stato possibile inviare la richiesta. ACTION: %d", msg->action);
+            printSaveP("CF CLIENT> Non è stato possibile inviare la richiesta. ACTION: %d", msg->action);
             errno = EBADE;
         }
 
@@ -713,39 +713,39 @@ int removeFile(const char* pathname) {
             if(esito == 0) {
                 switch(msg->action) {
                     case ANS_OK: {
-                        ppf(CLR_HIGHLIGHT); printSave("RF CLIENT> File '%s' eliminato con successo.", pathname); ppff();
+                        ppf(CLR_HIGHLIGHT); printSaveP("RF CLIENT> File '%s' eliminato con successo.", pathname); ppff();
                         break;
                     }
 
                     case ANS_FILE_NOT_EXISTS: {
-                        ppf(CLR_ERROR); printSave("RF CLIENT> Il file '%s' non esiste, non puoi eliminarlo.", pathname); ppff();
+                        ppf(CLR_ERROR); printSaveP("RF CLIENT> Il file '%s' non esiste, non puoi eliminarlo.", pathname); ppff();
                         errno = ENOENT;
                         break;
                     }
 
                     case ANS_NO_PERMISSION: {
-                        ppf(CLR_ERROR); printSave("RF CLIENT> Il file '%s' non può essere eliminato perché è lockato da un altro client.", pathname); ppff();
+                        ppf(CLR_ERROR); printSaveP("RF CLIENT> Il file '%s' non può essere eliminato perché è lockato da un altro client.", pathname); ppff();
                         errno = EACCES;
                         break;
                     }
 
                     case ANS_ERROR: {
-                        ppf(CLR_ERROR); printSave("OF CLIENT> Il file '%s' non può essere eliminato a causa di un problema interno del server.", pathname); ppff();
+                        ppf(CLR_ERROR); printSaveP("OF CLIENT> Il file '%s' non può essere eliminato a causa di un problema interno del server.", pathname); ppff();
                         errno = EREMOTEIO;
                         break;
                     }
 
                     default: {
-                        ppf(CLR_ERROR); printSave("RF CLIENT> Il server ha mandato una risposta non valida. ACTION: %d", msg->action); ppff();
+                        ppf(CLR_ERROR); printSaveP("RF CLIENT> Il server ha mandato una risposta non valida. ACTION: %d", msg->action); ppff();
                         errno = EBADRQC;
                     }
                 }
             } else { // il server non ha risposto al client
-                printSave("RF CLIENT> Il server non ha risposto alla richiesta. ACTION: %d", msg->action);
+                printSaveP("RF CLIENT> Il server non ha risposto alla richiesta. ACTION: %d", msg->action);
                 errno = EBADMSG;
             }
         } else { // impossibile inviare la richiesta
-            printSave("RF CLIENT> Non è stato possibile inviare la richiesta. ACTION: %d", msg->action);
+            printSaveP("RF CLIENT> Non è stato possibile inviare la richiesta. ACTION: %d", msg->action);
             errno = EBADE;
         }
 

@@ -22,6 +22,8 @@
 #include "list.h"
 #include "statistics.h"
 
+#define WELCOME_MESSAGE "Benvenuto, sono in attesa di tue richieste."
+
 FILE* fileLog;  // puntatore al file di log del client
 pthread_mutex_t mutexFileLog = PTHREAD_MUTEX_INITIALIZER;
 
@@ -60,11 +62,14 @@ static void cleanHT(hashtable_t* hasht) {
 /**
  * @brief   Trova un file da sostituire.
  * 
- * @param hasht Tabella su cui cercare file
+ * @param   hasht               Tabella su cui cercare file
+ * @param   ignoreEmptyFiles    Specifica se ignorare file senza contenuto (solo creati) o meno
+ *                              0 -> considera i file vuoti
+ *                              1 -> non considerare i file vuoti (usato per quando si ha troppo spazio occupato)
  * 
  * @returns la chiave dell'elemento da rimuovere
 */
-static char* findOldFile(hashtable_t* hasht) {
+static char* findOldFile(hashtable_t* hasht, int ignoreEmptyFiles) {
 	hash_elem_it it = HT_ITERATOR(hasht);
 
 	char* currentKey = ht_iterate_keys(&it);
@@ -82,15 +87,23 @@ static char* findOldFile(hashtable_t* hasht) {
         }
 
         if(currentElem->updatedDate < oldElem->updatedDate) {
-            *oldElem = *currentElem;
-            *oldKey = *currentKey;
+            // salvo il "nuovo" vecchio elemento solo se non sto ignorando i file vuoti oppure se li sto ignorando e la dimensione è diversa da 0
+            if(!ignoreEmptyFiles || (ignoreEmptyFiles && currentElem->data_length != 0)) {
+                *oldElem = *currentElem;
+                *oldKey = *currentKey;
+            }
         }
 
         currentKey = ht_iterate_keys(&it);
     } while(currentKey != NULL);
 
-    free(oldElem);
+    // se sto ignorando i file vuoti e la dimensione del vecchio elemento è 0 allora ritorno NULL perché non lo dovrei considerare
+    if(ignoreEmptyFiles && oldElem->data_length == 0) {
+        free(oldElem);
+        return NULL;
+    }
 
+    free(oldElem);
     return oldKey;
 }
 
@@ -140,7 +153,12 @@ int expellFiles(Message* msg, int socketConnection, int numGestoreConnessione, i
         checkStop(sendMessage(socketConnection, risposta) == -1, "errore invio messaggio inizio flush");
 
         do {
-            char* chiave = findOldFile(ht);
+            char* chiave;
+            if(controllo == 1) { // se devo fare controllo 1 significa che devo ignorare i file con 0 bytes perché tanto non occupano spazio
+                chiave = findOldFile(ht, 1);
+            } else {
+                chiave = findOldFile(ht, 0);
+            }
             File* oldFile = ht_get(ht, chiave);
             if(oldFile == NULL) {
                 esito = -1;
@@ -174,10 +192,9 @@ int expellFiles(Message* msg, int socketConnection, int numGestoreConnessione, i
 
 
 void printFiles(hashtable_t* hasht) {
-    ppf(CLR_WARNING); printf("------- LISTA ELEMENTI -------\n"); ppff();
+    ppf(CLR_WARNING); printSave("------- LISTA ELEMENTI -------"); ppff();
     hash_elem_it it = HT_ITERATOR(hasht);
     char* k = ht_iterate_keys(&it);
-    char* opener;
     char buffer[MAX_TIMESTAMP_SIZE];
 
     while(k != NULL) {
@@ -186,13 +203,11 @@ void printFiles(hashtable_t* hasht) {
             ppf(CLR_ERROR); printSave("LE   > Errore durante la stampa degli elementi nella hash table."); ppff();
             break;
         }
-        if(el->openBy == -1) opener = "nessuno"; else sprintf(opener, "%d", el->openBy);
         strftime(buffer, MAX_TIMESTAMP_SIZE, "%c", localtime(&el->updatedDate));
-        printSave("PERCORSO: %-45s | AUTORE: %-3d (aperto da: %s) | DATA AGGIORNAMENTO: %-10s | SPAZIO OCCUPATO: %ld bytes", k, el->author, opener, buffer, el->data_length);
-        fflush(stdout);
+        printSave("PERCORSO: %-45s | AUTORE: %-3d | DATA AGGIORNAMENTO: %-10s | SPAZIO OCCUPATO: %ld bytes", k, el->author, buffer, el->data_length);
         k = ht_iterate_keys(&it);
     }
-    ppf(CLR_WARNING); printf("----- FINE LISTA ELEMENTI ----\n"); ppff();
+    ppf(CLR_WARNING); printSave("----- FINE LISTA ELEMENTI ----"); ppff();
 }
 
 
@@ -334,6 +349,7 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
 
             /* =========== CONTROLLO SFORAMENTO MEMORIA ================== */
             if(expellFiles(msg, socketConnection, numero, 1) != 0) {
+                free(msg->data);
                 unlocka(mutexHT);
                 setMessage(risposta, ANS_ERROR, 0, NULL, NULL, 0);
                 ppf(CLR_ERROR); printSave("GC %d > Impossibile trovare un file da espellere al posto di '%s' (write)", numero, msg->path); ppff();
@@ -348,6 +364,7 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
             el->data_length = msg->data_length;
             el->updatedDate = (unsigned long)time(NULL);
             el->lastAction = REQ_WRITE;
+            free(msg->data);
             unlocka(mutexHT);
 
             // aggiornamento statistiche
@@ -360,7 +377,6 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
 
             setMessage(risposta, ANS_OK, 0, NULL, NULL, 0);
             ppf(CLR_SUCCESS); printSave("GC %d > File '%s' scritto nella hashtable", numero, msg->path); ppff();
-            free(msg->data);
             break;
         }
 
@@ -494,6 +510,7 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
 
             /* =========== CONTROLLO SFORAMENTO MEMORIA ================== */
             if(expellFiles(msg, socketConnection, numero, 1) != 0) {
+                free(msg->data);
                 unlocka(mutexHT);
                 setMessage(risposta, ANS_ERROR, 0, NULL, NULL, 0);
                 ppf(CLR_ERROR); printSave("GC %d > Impossibile trovare un file da espellere al posto di '%s' (append)", numero, msg->path); ppff();
@@ -510,6 +527,7 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
             el->data_length = el->data_length+msg->data_length;
             el->updatedDate = (unsigned long)time(NULL);
             el->lastAction = REQ_APPEND;
+            free(msg->data);
             unlocka(mutexHT);
 
             // aggiorno le statistiche all'immissione di un file
@@ -522,7 +540,6 @@ static Message* elaboraAzione(int socketConnection, Message* msg, int numero) {
 
             setMessage(risposta, ANS_OK, 0, NULL, NULL, 0);
             ppf(CLR_SUCCESS); printSave("GC %d > File '%s' aggiornato nella hashtable.", numero, msg->path); ppff();
-            free(msg->data);
             break;
         }
 
@@ -580,7 +597,7 @@ void* gestoreConnessione(void* n) {
         // invio messaggio di benvenuto al client
         Message* benvenuto = cmalloc(sizeof(Message));
 
-        char* testo_msg = "Benvenuto, sono in attesa di tue richieste";
+        char* testo_msg = WELCOME_MESSAGE;
         setMessage(benvenuto, ANS_WELCOME, 0, NULL, testo_msg, strlen(testo_msg));
 
         checkStop(sendMessage(socketConnection, benvenuto) != 0, "errore messaggio iniziale fallito");
