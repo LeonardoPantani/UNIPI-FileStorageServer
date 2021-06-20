@@ -4,4 +4,5 @@ client
 Specifiche_Progetto.pdf
 build/libs/*.so
 build/objects/*.o
-TestDirectory/output/
+TestDirectory/output/Client/*.*
+TestDirectory/output/Server/*.*
