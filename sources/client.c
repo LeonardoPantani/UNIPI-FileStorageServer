@@ -22,7 +22,9 @@
 
 #include "api.h"
 
-#define HELLO_MESSAGE "Grazie, ci sono."
+#define HELLO_MESSAGE   "Grazie, ci sono." // body dell'handshake iniziale HELLO
+#define LOG_FOLDER_NAME "TestDirectory/output/Client/" // cartella dove caricare il file di log (DEVE terminare con un /)
+#define LOG_FILE_NAME   "client_log.txt" // nome del file di log
 
 FILE* fileLog; // puntatore al file di log del client
 pthread_mutex_t mutexFileLog = PTHREAD_MUTEX_INITIALIZER;
@@ -383,8 +385,15 @@ int main(int argc, char* argv[]) {
     strcpy(ejectedFileFolder, "#"); // imposta il valore iniziale su #
     strcpy(savedFileFolder, "#"); // imposta il valore iniziale su #
 
+    struct stat st = {0};
+    char logfilename[] = LOG_FOLDER_NAME LOG_FILE_NAME;
+    if(stat(LOG_FOLDER_NAME, &st) == -1) {
+        mkdir(LOG_FOLDER_NAME, 0700);
+        ppf(CLR_WARNING); printf("CLIENT> E' stata generata la cartella '%s' per contenere il file di log '%s'.\n", LOG_FOLDER_NAME, LOG_FILE_NAME); ppff();
+    }
+
     // INIZIALIZZO FILE LOG
-    fileLog = fopen("TestDirectory/output/Client/client_log.txt", "w+");
+    fileLog = fopen(logfilename, "w+");
     checkStop(fileLog == NULL, "creazione file log");
 
     while ((opt = getopt(argc,argv, ":hf:w:W:D:r:R:d:t:l:u:c:p")) != -1) {
