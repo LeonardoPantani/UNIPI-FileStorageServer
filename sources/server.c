@@ -204,7 +204,6 @@ void printFiles(hashtable_t* hasht) {
             break;
         }
         strftime(buffer, MAX_TIMESTAMP_SIZE, "%c", localtime(&el->updatedDate));
-        // 
         printSave("PERCORSO: %-45s | AUTORE: %-3d | DATA AGGIORNAMENTO: %-10s | SPAZIO OCCUPATO: %zu bytes", k, el->author, buffer, el->data_length);
         k = ht_iterate_keys(&it);
     }
