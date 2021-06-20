@@ -398,6 +398,12 @@ int main(int argc, char* argv[]) {
 
     while ((opt = getopt(argc,argv, ":hf:w:W:D:r:R:d:t:l:u:c:p")) != -1) {
         switch(opt) {
+            case 'p': { // attiva la modalità verbose che stampa informazioni aggiuntive
+                verbose = TRUE;
+                ppf(CLR_INFO); printSave("CLIENT> Verbose ATTIVATO (-p)."); ppff();
+                break;
+            }
+
             case 'h': // aiuto
                 help();
             break;
@@ -406,14 +412,14 @@ int main(int argc, char* argv[]) {
                 socketPath = cmalloc(PATH_MAX);
                 memset(socketPath, 0, PATH_MAX);
                 strcpy(socketPath, optarg);
-                if(verbose) { ppf(CLR_HIGHLIGHT); printSave("CLIENT> Socket impostato su %s.", socketPath); ppff(); }
+                ppf(CLR_HIGHLIGHT); printSaveP("CLIENT> Socket impostato su %s.", socketPath); ppff();
             break;
 
             case 'w': { // salva i file contenuti in una cartella su server
                 actionList[actions] = AC_WRITE_RECU;
                 strcpy(parameterList[actions], optarg);
                 actions++;
-                if(verbose) { ppf(CLR_INFO); printSave("CLIENT> Operazione AC_WRITE_RECU (-w) in attesa."); ppff(); }
+                ppf(CLR_INFO); printSaveP("CLIENT> Operazione AC_WRITE_RECU (-w) in attesa."); ppff();
                 break;
             }
 
@@ -421,7 +427,7 @@ int main(int argc, char* argv[]) {
                 actionList[actions] = AC_WRITE_LIST;
                 strcpy(parameterList[actions], optarg);
                 actions++;
-                if(verbose) { ppf(CLR_INFO); printSave("CLIENT> Operazione AC_WRITE_LIST (-W) in attesa."); ppff(); }
+                ppf(CLR_INFO); printSaveP("CLIENT> Operazione AC_WRITE_LIST (-W) in attesa."); ppff();
                 break;
             }
 
@@ -433,7 +439,7 @@ int main(int argc, char* argv[]) {
                 }
                 closedir(folder);
                 strcpy(ejectedFileFolder, optarg);
-                if(verbose) { ppf(CLR_HIGHLIGHT); printSave("CLIENT> Cartella impostata su '%s' (-D).", optarg); ppff(); }
+                ppf(CLR_HIGHLIGHT); printSaveP("CLIENT> Cartella impostata su '%s' (-D).", optarg); ppff();
                 break;
             }
 
@@ -441,7 +447,7 @@ int main(int argc, char* argv[]) {
                 actionList[actions] = AC_READ_LIST;
                 strcpy(parameterList[actions], optarg);
                 actions++;
-                if(verbose) { ppf(CLR_INFO); printSave("CLIENT> Operazione AC_READ_LIST (-r) in attesa."); ppff(); }
+                ppf(CLR_INFO); printSaveP("CLIENT> Operazione AC_READ_LIST (-r) in attesa."); ppff();
                 break;
             }
 
@@ -449,7 +455,7 @@ int main(int argc, char* argv[]) {
                 actionList[actions] = AC_READ_RECU;
                 strcpy(parameterList[actions], optarg);
                 actions++;
-                if(verbose) { ppf(CLR_INFO); printSave("CLIENT> Operazione AC_READ_RECU (-R *n*) in attesa."); ppff(); }
+                ppf(CLR_INFO); printSaveP("CLIENT> Operazione AC_READ_RECU (-R *n*) in attesa."); ppff();
                 break;
             } 
 
@@ -461,13 +467,13 @@ int main(int argc, char* argv[]) {
                 }
                 closedir(folder);
                 strcpy(savedFileFolder, optarg);
-                if(verbose) { ppf(CLR_HIGHLIGHT); printSave("CLIENT> Cartella impostata su '%s' (-d).", optarg); ppff(); }
+                ppf(CLR_HIGHLIGHT); printSaveP("CLIENT> Cartella impostata su '%s' (-d).", optarg); ppff();
                 break;
             }
 
             case 't': { // specifica tempo tra una richiesta e l'altra in ms
                 timeoutRequests = atol(optarg);
-                if(verbose) { ppf(CLR_INFO); printSave("CLIENT> Tempo tra una richiesta e l'altra: %ld (-t).", timeoutRequests); ppff(); }
+                ppf(CLR_INFO); printSaveP("CLIENT> Tempo tra una richiesta e l'altra: %ldms (-t).", timeoutRequests); ppff();
                 break;
             }
 
@@ -475,7 +481,7 @@ int main(int argc, char* argv[]) {
                 actionList[actions] = AC_ACQUIRE_MUTEX;
                 strcpy(parameterList[actions], optarg);
                 actions++;
-                if(verbose) { ppf(CLR_INFO); printSave("CLIENT> Operazione AC_ACQUIRE_MUTEX (-l) in attesa."); ppff(); }
+                ppf(CLR_INFO); printSaveP("CLIENT> Operazione AC_ACQUIRE_MUTEX (-l) in attesa."); ppff();
                 break;
             }
 
@@ -483,7 +489,7 @@ int main(int argc, char* argv[]) {
                 actionList[actions] = AC_RELEASE_MUTEX;
                 strcpy(parameterList[actions], optarg);
                 actions++;
-                if(verbose) { ppf(CLR_INFO); printSave("CLIENT> Operazione AC_RELEASE_MUTEX (-u) in attesa."); ppff(); }
+                ppf(CLR_INFO); printSaveP("CLIENT> Operazione AC_RELEASE_MUTEX (-u) in attesa."); ppff();
                 break;
             }
 
@@ -491,23 +497,17 @@ int main(int argc, char* argv[]) {
                 actionList[actions] = AC_DELETE;
                 strcpy(parameterList[actions], optarg);
                 actions++;
-                if(verbose) { ppf(CLR_INFO); printSave("CLIENT> Operazione AC_DELETE (-c) in attesa."); ppff(); }
-                break;
-            }
-
-            case 'p': { // attiva la modalità verbose che stampa roba
-                verbose = TRUE;
-                if(verbose) { ppf(CLR_INFO); printSave("CLIENT> Verbose ATTIVATO (-p)."); ppff(); }
+                ppf(CLR_INFO); printSaveP("CLIENT> Operazione AC_DELETE (-c) in attesa."); ppff();
                 break;
             }
 
             case ':': { // manca un argomento
                 switch(optopt) {
-                    case 'R': {
+                    case 'R': { // può non avere argomenti (0 di default)
                         actionList[actions] = AC_READ_RECU;
                         strcpy(parameterList[actions], "0");
                         actions++;
-                        if(verbose) { ppf(CLR_INFO); printSave("CLIENT> Operazione AC_READ_RECU (-R *0*) in attesa."); ppff(); }
+                        ppf(CLR_INFO); printSaveP("CLIENT> Operazione AC_READ_RECU (-R *0*) in attesa."); ppff();
                         break;
                     }
 

@@ -29,7 +29,8 @@ SOCKET_EXTENSION = sk
 # --------- COMPILAZIONE -----------
 CC = gcc
 CFLAGS += -g -std=c99 -Wall
-CXXFLAGS += -DDEBUG -DDEBUG_VERBOSE
+CXXFLAGS += -DDEBUG
+# CXXFLAGS += -DDEBUG -DDEBUG_VERBOSE # stampa informazioni relative all'invio e ricezione dei messaggi
 THREAD_FLAGS = -pthread
 INCLUDES = -I./$(HDR_FOLDER)
 
@@ -40,10 +41,10 @@ client_dependencies = libs/libcomm.so libs/libapi.so
 all: clean server client
 
 server: $(server_dependencies)
-	$(CC) $(INCLUDES) $(CFLAGS) $(THREAD_FLAGS) sources/server.c -o server $(CXXFLAGS) -Wl,-rpath,./build/libs -L ./build/libs -lds -lserver -lcomm
+	$(CC) $(INCLUDES) $(CFLAGS) $(CXXFLAGS) $(THREAD_FLAGS) sources/server.c -o server -Wl,-rpath,./build/libs -L ./build/libs -lds -lserver -lcomm
 
 client: $(client_dependencies)
-	$(CC) $(INCLUDES) $(CFLAGS) sources/client.c -o client $(CXXFLAGS) -Wl,-rpath,./build/libs -L ./build/libs -lapi -lcomm
+	$(CC) $(INCLUDES) $(CFLAGS) $(CXXFLAGS) sources/client.c -o client -Wl,-rpath,./build/libs -L ./build/libs -lapi -lcomm
 
 
 libs/libserver.so: $(OBJECT_FOLDER)/config.o $(OBJECT_FOLDER)/statistics.o
@@ -61,28 +62,28 @@ libs/libcomm.so: $(OBJECT_FOLDER)/utils.o $(OBJECT_FOLDER)/communication.o
 
 
 $(OBJECT_FOLDER)/api.o: $(API_FOLDER)/api.c $(HDR_FOLDER)/api.h
-	$(CC) $(INCLUDES) $(CFLAGS) $(API_FOLDER)/api.c -c -fPIC -o $@
+	$(CC) $(INCLUDES) $(CFLAGS) $(CXXFLAGS) $(API_FOLDER)/api.c -c -fPIC -o $@
 
 $(OBJECT_FOLDER)/communication.o: $(UTL_FOLDER)/communication.c $(HDR_FOLDER)/communication.h
-	$(CC) $(INCLUDES) $(CFLAGS) $(UTL_FOLDER)/communication.c -c -fPIC -o $@
+	$(CC) $(INCLUDES) $(CFLAGS) $(CXXFLAGS) $(UTL_FOLDER)/communication.c -c -fPIC -o $@
 
 $(OBJECT_FOLDER)/statistics.o: $(UTL_FOLDER)/statistics.c $(HDR_FOLDER)/statistics.h
-	$(CC) $(INCLUDES) $(CFLAGS) $(UTL_FOLDER)/statistics.c -c -fPIC -o $@
+	$(CC) $(INCLUDES) $(CFLAGS) $(CXXFLAGS) $(UTL_FOLDER)/statistics.c -c -fPIC -o $@
 
 $(OBJECT_FOLDER)/config.o: $(UTL_FOLDER)/config.c $(HDR_FOLDER)/config.h
-	$(CC) $(INCLUDES) $(CFLAGS) $(UTL_FOLDER)/config.c -c -fPIC -o $@
+	$(CC) $(INCLUDES) $(CFLAGS) $(CXXFLAGS) $(UTL_FOLDER)/config.c -c -fPIC -o $@
 
 $(OBJECT_FOLDER)/utils.o: $(UTL_FOLDER)/utils.c $(HDR_FOLDER)/utils.h
-	$(CC) $(INCLUDES) $(CFLAGS) $(UTL_FOLDER)/utils.c -c -fPIC -o $@
+	$(CC) $(INCLUDES) $(CFLAGS) $(CXXFLAGS) $(UTL_FOLDER)/utils.c -c -fPIC -o $@
 
 $(OBJECT_FOLDER)/node.o: $(DS_FOLDER)/node.c $(HDR_FOLDER)/node.h
-	$(CC) $(INCLUDES) $(CFLAGS) $(DS_FOLDER)/node.c -c -fPIC -o $@
+	$(CC) $(INCLUDES) $(CFLAGS) $(CXXFLAGS) $(DS_FOLDER)/node.c -c -fPIC -o $@
 
 $(OBJECT_FOLDER)/list.o: $(DS_FOLDER)/list.c $(HDR_FOLDER)/list.h
-	$(CC) $(INCLUDES) $(CFLAGS) $(DS_FOLDER)/list.c -c -fPIC -o $@
+	$(CC) $(INCLUDES) $(CFLAGS) $(CXXFLAGS) $(DS_FOLDER)/list.c -c -fPIC -o $@
 
 $(OBJECT_FOLDER)/hashtable.o: $(DS_FOLDER)/hashtable.c $(HDR_FOLDER)/hashtable.h
-	$(CC) $(INCLUDES) $(CFLAGS) $(DS_FOLDER)/hashtable.c -c -fPIC -o $@
+	$(CC) $(INCLUDES) $(CFLAGS) $(CXXFLAGS) $(DS_FOLDER)/hashtable.c -c -fPIC -o $@
 
 
 # ------------- TARGET PHONY --------------

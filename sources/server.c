@@ -809,7 +809,6 @@ int main(int argc, char* argv[]) {
 
     
     /*========= CONNESSIONE =========*/
-    unlink(config.socket_file_name); // FIXME da rimuovere quando sta roba sarà più stabile
     // 1. SOCKET
     int socket_fd = socket(AF_UNIX, SOCK_STREAM, 0);
     checkStop(socket_fd == -1, "creazione socket iniziale");

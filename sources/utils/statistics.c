@@ -6,6 +6,8 @@
 
 #include "statistics.h"
 
+#define BUFFER_STATS_SIZE 1024 // dimensione del buffer che contiene le statistiche da mettere nel file
+
 int printStats(const char* pathname, int workers) {
     extern Statistics stats;
     extern Config config;
@@ -13,13 +15,11 @@ int printStats(const char* pathname, int workers) {
     extern pthread_mutex_t mutexFileLog;
 
     FILE* filePointer;
-
     filePointer = fopen(pathname, "w");
-
     checkM1(filePointer == NULL, "impossibile creare file stats");
 
     // malloc del buffer da usare per scrivere su file
-    char *out = cmalloc(sizeof(char)*1024);
+    char *out = cmalloc(sizeof(char)*BUFFER_STATS_SIZE);
 
     // ottengo la data attuale in formato leggibile
     time_t tempo;
