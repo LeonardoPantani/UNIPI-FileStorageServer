@@ -6,7 +6,7 @@
 
 #include "hashtable.h"
 
-/* 	Internal funcion to calculate hash for keys.
+/* 	Internal function to calculate hash for keys.
 	It's based on the DJB algorithm from Daniel J. Bernstein.
 	The key must be ended by '\0' character.*/
 unsigned int ht_calc_hash(char* str) {

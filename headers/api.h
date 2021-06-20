@@ -61,6 +61,7 @@ int removeSocketAssociation(char* socketname);
 
 /**
  * @brief Trova il file descriptor dal socket name.
+ * @note  Funzione interna.
  * 
  * @param socketname    Il nome del socket da cui ricavare il fd
  * 

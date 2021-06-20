@@ -748,7 +748,6 @@ int main(int argc, char* argv[]) {
     memset(&ignoro, 0, sizeof(ignoro));
     ignoro.sa_handler = SIG_IGN;
     checkStop(sigaction(SIGPIPE, &ignoro, NULL) == -1, "SC per ignorare segnale SIGPIPE");
-    checkStop(sigaction(SIGSEGV, &ignoro, NULL) == -1, "SC per ignorare segnale SIGSEGV");
     // tolgo la maschera inserita all'inizio, la lascio solo per i segnali da gestire con thread
     checkStop(sigemptyset(&insieme) == -1, "settaggio a 0 di tutte le flag di insieme");
     checkStop(sigaddset(&insieme, SIGINT) == -1, "settaggio a 1 della flag per SIGINT");
