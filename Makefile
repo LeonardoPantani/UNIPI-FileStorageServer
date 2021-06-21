@@ -89,16 +89,18 @@ $(OBJECT_FOLDER)/hashtable.o: $(DS_FOLDER)/hashtable.c $(HDR_FOLDER)/hashtable.h
 # ------------- TARGET PHONY --------------
 clean:
 	rm -f -rf build
-	rm -f -rf TestDirectory/output/Client/*.txt
-	rm -f -rf TestDirectory/output/Client/flushati/*.*
-	rm -f -rf TestDirectory/output/Client/salvati/*.*
-	rm -f -rf TestDirectory/output/Server/*.txt
+	rm -f -rf TestDirectory/output
 	rm -f *.$(SOCKET_EXTENSION)
 	rm -f server
 	rm -f client
 	mkdir build
 	mkdir $(OBJECT_FOLDER)
 	mkdir $(LIB_FOLDER)
+	mkdir TestDirectory/output
+	mkdir TestDirectory/output/Client
+	mkdir TestDirectory/output/Client/flushati
+	mkdir TestDirectory/output/Client/salvati
+	mkdir TestDirectory/output/Server
 
 
 test1:
